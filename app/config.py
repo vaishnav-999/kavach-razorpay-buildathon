@@ -29,6 +29,10 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        # Values injected by a deployment platform (Render's dashboard, docker
+        # --env-file) keep their surrounding whitespace, where python-dotenv
+        # strips it. Strip here so local and deployed runs validate identically.
+        str_strip_whitespace=True,
     )
 
     # ── Core ──────────────────────────────────────────────────────────────
