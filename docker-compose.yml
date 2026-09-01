@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: kavach
       POSTGRES_DB: kavach
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - kavach_pgdata:/var/lib/postgresql/data
     healthcheck:
