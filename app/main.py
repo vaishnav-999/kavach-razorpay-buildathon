@@ -2,8 +2,8 @@
 
 M0 wires configuration validation at startup, /health, the seed and the static
 mount. M2 adds the §7 merchant plane. M3 adds §12 payments, plus the temporary
-dev checkout scaffolding that M5 deletes. Later routers arrive with their
-milestones.
+dev checkout scaffolding that M5 deletes. M4 adds the §12.5 webhook.
+Later routers arrive with their milestones.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from app.merchant.router import router as merchant_router
 from app.merchant.seed import seed_database
 from app.platform import dev as dev_scaffold
 from app.platform.payments import router as payments_router
+from app.platform.webhooks import router as webhooks_router
 from app.schemas import HealthOut
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -83,6 +84,10 @@ def create_app() -> FastAPI:
 
     # §12.4 and §12.6 — payment verification and reconciliation.
     app.include_router(payments_router)
+
+    # §12.5 — the Razorpay webhook. Razorpay is the only caller in
+    # production; the §15 replay demo POSTs a stored body back to it.
+    app.include_router(webhooks_router)
 
     # TODO(M5): delete these two lines and app/platform/dev.py with them. The
     # scaffolding exists only so M3 can prove the Razorpay rail end to end
