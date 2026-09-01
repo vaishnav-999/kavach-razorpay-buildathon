@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.py[cod]
+app/static/*
+!app/static/.gitkeep
+node_modules/
+.venv/
+.pytest_cache/

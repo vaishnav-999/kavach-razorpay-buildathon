@@ -1,0 +1,87 @@
+---
+description: Kavach — architecture, security and payment rules. Always apply.
+alwaysApply: true
+---
+
+# Kavach — Cursor Rules
+
+Full spec: `BUILD_SPEC.md`. Standing orders: `CLAUDE.md`. Read those before editing.
+
+Kavach proves an AI agent can transact for real while being structurally incapable of
+exceeding the authority a user granted it. **Assume the LLM is compromised — the system
+must still be financially safe.** Every rule below serves that.
+
+## Never do these
+
+1. Import `app.platform.razorpay_client` from anywhere outside `app/platform/`.
+2. Import anything from `app.merchant` inside `app/buyer/`. The buyer talks to the
+   merchant over HTTP only, via `app/buyer/client.py`.
+3. Import an LLM SDK (`google.genai`, `anthropic`) outside `app/buyer/llm/`.
+   `agent.py` and `tools.py` use only the neutral types in `llm/base.py`.
+4. Create a Razorpay order on any path that did not first receive `ALLOW` from
+   `guard.evaluate()`.
+5. Write `payments.status` from anywhere except `verify_checkout_signature()` or the
+   webhook handler.
+6. Parse or re-serialize the webhook body before computing its signature. Use
+   `await request.body()`.
+7. Use `float` or rupees in a money path. Integer paise, `BigInteger`, everywhere.
+   No rupee-denominated field crosses an API boundary.
+8. Interpolate merchant or product text into a system prompt. Wrap it in
+   `<untrusted_merchant_data>`.
+9. UPDATE or DELETE `audit_events`.
+10. Add a tool parameter that lets the agent set a price, a total, or a policy override.
+11. Sanitize, escape or strip the PK-005 description. It is served verbatim on purpose.
+12. Make an LLM API call from a test.
+13. Commit a real secret. `.env` is gitignored.
+
+## Razorpay specifics
+
+Two signature schemes, never conflate:
+- Checkout: `hmac_sha256(order_id + "|" + payment_id, RAZORPAY_KEY_SECRET)`
+- Webhook: `hmac_sha256(raw_body_bytes, RAZORPAY_WEBHOOK_SECRET)`
+
+Our own mandates and quotes use Ed25519, which is neither of the above.
+
+When verifying a checkout signature, use `order.razorpay_order_id` from **our database**,
+never the value posted by the browser.
+
+Dedup webhooks on the `x-razorpay-event-id` header, enforced by a UNIQUE constraint and
+a caught `IntegrityError`. Never check-then-insert.
+
+Webhook handlers return **200 for every business outcome**, including duplicates.
+Non-2xx only for an invalid signature.
+
+Payment state is monotonic toward PAID. A `payment.failed` after `payment.captured` must
+not un-pay an order.
+
+Never invent a Razorpay endpoint, parameter or response shape. If it isn't in
+`BUILD_SPEC.md` §12, stop and ask.
+
+## Guard rules
+
+Nine rules, MG-001 to MG-009, exact IDs and codes from `BUILD_SPEC.md` §9.2. All nine
+run on every evaluation — never short-circuit. Every rule reports `observed`,
+`threshold` and `detail` even when it passes. One `guard_decisions` row per evaluation,
+on ALLOW as well as BLOCK. `failed_rule_id` is the lowest-numbered failing rule.
+
+The Guard is a pure function of database state. No LLM call, no network call, no
+randomness. `now` is injected, never read from the clock inside.
+
+## Protocol honesty
+
+We are **inspired by** UCP and **architecturally aligned** with AP2. Never write
+"UCP-compliant" or "AP2-compliant" anywhere — code, comments, API responses, or docs.
+
+## Not in scope
+
+No LangChain, LangGraph, CrewAI, vector DB, embeddings, Redis, Celery, message queues,
+microservices, separate frontend deploy, or auth provider.
+
+No refunds, subscriptions, multi-currency, tax engine, delivery tracking, S2S payment
+APIs, UPI Payment Links, x402, A2A, or ACP.
+
+## Style
+
+Pydantic v2 for every request and response. Type hints everywhere. Split modules past
+~300 lines. Exact table, column, endpoint, rule-ID and event-type strings from the spec —
+never a near-miss.
