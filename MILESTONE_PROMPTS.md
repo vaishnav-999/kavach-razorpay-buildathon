@@ -65,7 +65,7 @@ Expect `{"status":"ok"}`. Then check the seed loaded:
 docker compose exec db psql -U kavach -d kavach -c \
   "SELECT sku, name, unit_price_paise FROM products ORDER BY sku;"
 ```
-Expect PK-001…PK-005 plus NS-001…NS-003 and SC-001…SC-002. PK-001 must be `28000`,
+Expect PK-001…PK-005 plus NS-001…NS-003 and SC-001…SC-002. PK-001 must be `42000`,
 PK-003 `45000`, PK-005 `20000`.
 
 **COMMIT:** `git commit -am "M0: foundation"`
@@ -148,7 +148,7 @@ The catalog endpoint must return product descriptions VERBATIM, including the
 PK-005 injection payload. That is deliberate — do not sanitize it.
 
 Non-transactable merchants advertise shorter capability lists per §16.1:
-nova-stationery has no checkout.submit, saffron-caterers has no quote.signed.
+nova-stationery has no checkout.submit, saffron-tiffin has no quote.signed.
 
 Do not implement /merchant/checkout/submit yet. That comes in M5 after the
 Guard exists.
