@@ -7,9 +7,19 @@ crosses an API boundary anywhere in this system (§18.3).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+
+
+def _iso_z(value: datetime) -> str:
+    # §18.3 — timestamps are ISO 8601 UTC with a Z suffix, everywhere.
+    return value.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+UtcDatetime = Annotated[
+    datetime, PlainSerializer(_iso_z, return_type=str, when_used="json")
+]
 
 # Enumerated string states, kept as Literals so a typo is a type error.
 CartStatus = Literal["OPEN", "QUOTED", "CONSUMED", "ABANDONED"]
@@ -37,7 +47,7 @@ class MerchantOut(ORMModel):
     public_key_hex: str
     capabilities: list[str]
     base_url: str | None = None
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 # 2. products
@@ -52,7 +62,7 @@ class ProductOut(ORMModel):
     unit_price_paise: int
     stock_qty: int
     active: bool
-    updated_at: datetime
+    updated_at: UtcDatetime
 
 
 # 3. carts / 4. cart_items
@@ -63,7 +73,7 @@ class CartItemOut(ORMModel):
     sku: str
     qty: int
     unit_price_paise_snapshot: int
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class CartOut(ORMModel):
@@ -72,7 +82,7 @@ class CartOut(ORMModel):
     session_id: str | None = None
     correlation_id: str | None = None
     status: CartStatus
-    created_at: datetime
+    created_at: UtcDatetime
     items: list[CartItemOut] = Field(default_factory=list)
 
 
@@ -97,12 +107,12 @@ class QuoteOut(ORMModel):
     currency: str
     line_items: list[QuoteLineItem]
     total_paise: int
-    issued_at: datetime
-    expires_at: datetime
+    issued_at: UtcDatetime
+    expires_at: UtcDatetime
     status: QuoteStatus
     signing_payload: dict[str, Any]
     signature: str
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 # 6. mandates
@@ -118,13 +128,13 @@ class MandateOut(ORMModel):
     max_transactions: int
     allowed_merchant_ids: list[str]
     allowed_categories: list[str]
-    issued_at: datetime | None = None
-    expires_at: datetime | None = None
-    revoked_at: datetime | None = None
+    issued_at: UtcDatetime | None = None
+    expires_at: UtcDatetime | None = None
+    revoked_at: UtcDatetime | None = None
     prompt_playback: str
     signing_payload: dict[str, Any] | None = None
     signature: str | None = None
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 # 7. guard_decisions
@@ -154,7 +164,7 @@ class GuardDecisionOut(ORMModel):
     block_code: str | None = None
     rules: list[GuardRuleResult]
     duration_ms: int
-    evaluated_at: datetime
+    evaluated_at: UtcDatetime
 
 
 # 8. orders
@@ -172,8 +182,8 @@ class OrderOut(ORMModel):
     razorpay_order_id: str | None = None
     receipt: str | None = None
     line_items: list[QuoteLineItem]
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
 
 
 # 9. payments
@@ -188,8 +198,8 @@ class PaymentOut(ORMModel):
     status: PaymentStatus
     signature_verified: bool
     source: PaymentSource
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
 
 
 # 10. webhook_events
@@ -202,8 +212,8 @@ class WebhookEventOut(ORMModel):
     razorpay_payment_id: str | None = None
     signature_valid: bool
     was_duplicate: bool
-    processed_at: datetime | None = None
-    created_at: datetime
+    processed_at: UtcDatetime | None = None
+    created_at: UtcDatetime
 
 
 # 11. agent_sessions
@@ -218,8 +228,8 @@ class AgentSessionOut(ORMModel):
     cassette_name: str | None = None
     tool_call_count: int
     submit_attempt_count: int
-    started_at: datetime
-    ended_at: datetime | None = None
+    started_at: UtcDatetime
+    ended_at: UtcDatetime | None = None
     terminal_reason: str | None = None
 
 
@@ -232,7 +242,7 @@ class AuditEventOut(ORMModel):
     event_type: str
     actor: Actor
     payload: dict[str, Any]
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class HealthOut(BaseModel):

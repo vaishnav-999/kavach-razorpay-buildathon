@@ -63,6 +63,9 @@ class Product(Base):
     # Untrusted input. Served verbatim (§7.4). Never sanitised.
     description: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(Text, nullable=False)
+    # §16.2 nutrition attributes. Nullable: stationery lines carry neither.
+    protein_grams: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    diet: Mapped[str | None] = mapped_column(Text, nullable=True)
     unit_price_paise: Mapped[int] = mapped_column(BigInteger, nullable=False)
     stock_qty: Mapped[int] = mapped_column(Integer, nullable=False)
     active: Mapped[bool] = mapped_column(

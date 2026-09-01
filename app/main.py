@@ -1,7 +1,7 @@
 """Kavach application factory.
 
-M0 wires only: configuration validation at startup, /health, the seed, and the
-static mount. Routers arrive in later milestones.
+M0 wires configuration validation at startup, /health, the seed and the static
+mount. M2 adds the §7 merchant plane. Later routers arrive with their milestones.
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.db import SessionLocal
 from app.errors import install_exception_handlers
+from app.merchant.router import public_router as merchant_public_router
+from app.merchant.router import router as merchant_router
 from app.merchant.seed import seed_database
 from app.schemas import HealthOut
 
@@ -68,6 +70,12 @@ def create_app() -> FastAPI:
     @app.get("/health", response_model=HealthOut)
     def health() -> HealthOut:
         return HealthOut(status="ok")
+
+    # §7 — the merchant plane. Registered before the static mount, because
+    # Starlette matches routes in the order they were added and the mount at
+    # "/" would otherwise swallow everything.
+    app.include_router(merchant_public_router)
+    app.include_router(merchant_router)
 
     # The built frontend lands here (M7). The directory is gitignored, so make
     # sure it exists before mounting.
