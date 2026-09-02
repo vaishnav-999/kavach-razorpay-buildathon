@@ -60,6 +60,12 @@ RULE_BLOCK_CODES: dict[str, str] = {
 }
 
 
+# The `typ` a quote payload must carry. A signature proves the merchant signed
+# *something*; without a type tag, a mandate payload and a quote payload are
+# both just signed JSON.
+QUOTE_PAYLOAD_TYPE = "kavach.quote.v1"
+
+
 def rupees(paise: int) -> str:
     """`756000` -> `Rs 7,560.00`. Display only; never a value in a payload."""
     sign = "-" if paise < 0 else ""
@@ -75,6 +81,16 @@ def _iso_ms(value: datetime) -> str:
 
 def _iso_z(value: datetime) -> str:
     return _aware(value).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_iso_z(value: Any) -> datetime | None:
+    """Parse an ISO 8601 timestamp from a signed payload. None if unparseable."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return _aware(datetime.fromisoformat(value.replace("Z", "+00:00")))
+    except ValueError:
+        return None
 
 
 def _aware(value: datetime) -> datetime:
@@ -202,7 +218,10 @@ def _payload_column_drift(mandate: Mandate) -> list[dict[str, Any]]:
     and every downstream rule would enforce the raised number.
     """
     payload = mandate.signing_payload or {}
-    expires_at = _iso_z(mandate.expires_at) if mandate.expires_at else None
+    # Both sides of the timestamp are normalised through the same formatter, so
+    # a sub-second component or a `+00:00` spelling is not mistaken for
+    # tampering.
+    signed_expiry = _parse_iso_z(payload.get("expires_at"))
     pairs: tuple[tuple[str, Any, Any], ...] = (
         ("max_amount_paise",
          int(mandate.max_amount_paise), payload.get("max_amount_paise")),
@@ -216,7 +235,11 @@ def _payload_column_drift(mandate: Mandate) -> list[dict[str, Any]]:
         ("allowed_categories",
          list(mandate.allowed_categories or []),
          payload.get("allowed_categories")),
-        ("expires_at", expires_at, payload.get("expires_at")),
+        (
+            "expires_at",
+            _iso_z(mandate.expires_at) if mandate.expires_at else None,
+            _iso_z(signed_expiry) if signed_expiry else None,
+        ),
         ("currency", mandate.currency, payload.get("currency")),
     )
     return [
@@ -397,6 +420,42 @@ def _mg007(mandate: Mandate | None, quote: Quote | None) -> RuleResult:
     return RuleResult("MG-007", passed, observed, allowed, "category", detail)
 
 
+def _quote_payload_drift(quote: Quote) -> list[dict[str, Any]]:
+    """Fields where the quote row disagrees with the payload the merchant signed.
+
+    The same reasoning as `_payload_column_drift`, on the quote side. MG-008
+    reads `status`, `expires_at` and `merchant_id` from columns while verifying
+    a signature over a payload that carries its own copies of two of them; if
+    the two ever disagree, the signature is covering something other than what
+    the rule enforced.
+
+    `total_paise` is deliberately absent: it is already reconciled against the
+    signed line items below, which is the stronger check.
+    """
+    payload = quote.signing_payload or {}
+    # Both sides of the timestamp are normalised through the same formatter, so
+    # a sub-second component or a `+00:00` spelling on either side is not
+    # mistaken for tampering.
+    signed_expiry = _parse_iso_z(payload.get("expires_at"))
+    pairs: tuple[tuple[str, Any, Any], ...] = (
+        ("typ", QUOTE_PAYLOAD_TYPE, payload.get("typ")),
+        ("quote_id", quote.id, payload.get("quote_id")),
+        ("merchant_id", quote.merchant_id, payload.get("merchant_id")),
+        ("currency", quote.currency, payload.get("currency")),
+        ("cart_id", quote.cart_id, payload.get("cart_id")),
+        (
+            "expires_at",
+            _iso_z(quote.expires_at) if quote.expires_at else None,
+            _iso_z(signed_expiry) if signed_expiry else None,
+        ),
+    )
+    return [
+        {"field": field, "column": column, "signed": signed}
+        for field, column, signed in pairs
+        if column != signed
+    ]
+
+
 def _mg008(
     quote: Quote | None,
     quote_id: str,
@@ -417,12 +476,18 @@ def _mg008(
         )
 
     failures: list[str] = []
+    drift: list[dict[str, Any]] = []
     payload = quote.signing_payload or {}
 
     if not quote.signature or not verify(
         merchant_public_key(), payload, quote.signature
     ):
         failures.append("signature_invalid")
+    else:
+        # The signature verified, so the payload is authoritative — which only
+        # helps if the row still says the same thing.
+        drift = _quote_payload_drift(quote)
+        failures.extend(f"{d['field']}_mismatch" for d in drift)
     if quote.status != "ACTIVE":
         failures.append(f"quote_{quote.status.lower()}")
     if not (_aware(now) < _aware(quote.expires_at)):
@@ -448,7 +513,8 @@ def _mg008(
     if passed:
         detail = (
             f"Quote {quote.id} verifies against the merchant signing key, is "
-            f"ACTIVE until {_iso_z(quote.expires_at)}, and its signed total of "
+            f"ACTIVE until {_iso_z(quote.expires_at)}, matches the signed "
+            f"payload field for field, and its signed total of "
             f"{rupees(quote.total_paise)} is exactly the amount requested."
         )
     else:
@@ -457,6 +523,12 @@ def _mg008(
             f"Signed total {rupees(quote.total_paise)} against requested "
             f"{rupees(requested_total_paise)}."
         )
+        if drift:
+            detail += " The quote row no longer matches what was signed: " + "; ".join(
+                f"{d['field']} is {d['column']!r} in the row against "
+                f"{d['signed']!r} in the signed payload"
+                for d in drift
+            ) + "."
     return RuleResult(
         "MG-008", passed, failures if failures else "intact", "intact", "checks", detail
     )
