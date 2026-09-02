@@ -192,8 +192,43 @@ def merchant_public_key() -> str:
 # ── the nine rules ────────────────────────────────────────────────────────
 
 
+def _payload_column_drift(mandate: Mandate) -> list[dict[str, Any]]:
+    """Fields where the stored row disagrees with the payload that was signed.
+
+    The signature proves the Mandate Authority issued *that payload*. It says
+    nothing about the columns, and the columns are what MG-003 to MG-007 and
+    MG-009 actually read. Without this comparison, anything able to write to
+    `mandates` could raise a cap on a mandate whose signature still verifies,
+    and every downstream rule would enforce the raised number.
+    """
+    payload = mandate.signing_payload or {}
+    expires_at = _iso_z(mandate.expires_at) if mandate.expires_at else None
+    pairs: tuple[tuple[str, Any, Any], ...] = (
+        ("max_amount_paise",
+         int(mandate.max_amount_paise), payload.get("max_amount_paise")),
+        ("cumulative_cap_paise",
+         int(mandate.cumulative_cap_paise), payload.get("cumulative_cap_paise")),
+        ("max_transactions",
+         int(mandate.max_transactions), payload.get("max_transactions")),
+        ("allowed_merchant_ids",
+         list(mandate.allowed_merchant_ids or []),
+         payload.get("allowed_merchant_ids")),
+        ("allowed_categories",
+         list(mandate.allowed_categories or []),
+         payload.get("allowed_categories")),
+        ("expires_at", expires_at, payload.get("expires_at")),
+        ("currency", mandate.currency, payload.get("currency")),
+    )
+    return [
+        {"field": field, "column": column, "signed": signed}
+        for field, column, signed in pairs
+        if column != signed
+    ]
+
+
 def _mg001(mandate: Mandate | None, mandate_id: str) -> RuleResult:
-    """Ed25519 verify of `mandates.signature` over `mandates.signing_payload`.
+    """Ed25519 verify of `mandates.signature` over `mandates.signing_payload`,
+    and then a check that the row still says what the signature covers.
 
     A `PROPOSED` mandate has no signature and fails here by construction. That
     is not a special case: a compromised agent that skips the human and submits
@@ -212,16 +247,34 @@ def _mg001(mandate: Mandate | None, mandate_id: str) -> RuleResult:
             f"Mandate {mandate.id} is {mandate.status} and carries no signature. "
             "Proposing authority is not granting it.",
         )
-    ok = verify(mandate_authority_public_key(), mandate.signing_payload, mandate.signature)
-    if ok:
+    if not verify(
+        mandate_authority_public_key(), mandate.signing_payload, mandate.signature
+    ):
         return RuleResult(
-            "MG-001", True, "valid", "valid", "ed25519",
-            "Mandate signature verified against the Mandate Authority public key.",
+            "MG-001", False, "invalid", "valid", "ed25519",
+            "The stored mandate signature does not verify against the Mandate "
+            "Authority public key.",
         )
+
+    drift = _payload_column_drift(mandate)
+    if drift:
+        return RuleResult(
+            "MG-001", False, [d["field"] for d in drift], "valid", "ed25519",
+            "The mandate signature verifies, but the stored mandate no longer "
+            "matches what was signed: "
+            + "; ".join(
+                f"{d['field']} is {d['column']!r} in the row against "
+                f"{d['signed']!r} in the signed payload"
+                for d in drift
+            )
+            + ". The limits the other rules read are not the limits the human "
+            "authorised.",
+        )
+
     return RuleResult(
-        "MG-001", False, "invalid", "valid", "ed25519",
-        "The stored mandate signature does not verify against the Mandate "
-        "Authority public key.",
+        "MG-001", True, "valid", "valid", "ed25519",
+        "Mandate signature verified against the Mandate Authority public key, "
+        "and every limit the other rules read matches the signed payload.",
     )
 
 
