@@ -79,9 +79,13 @@ ALLOWED_KEYS: dict[str, set[str]] = {
         "merchant_id", "quote_id", "signature", "total_paise",
     },
     "MANDATE_PROPOSED": {
-        "allowed_categories", "allowed_merchant_ids", "cumulative_cap_paise",
-        "currency", "expires_at", "mandate_id", "max_amount_paise",
-        "max_transactions", "prompt_playback",
+        # `clamps_applied` is not in §13.2's list. It is here because §8.3's
+        # capping is silent, and silent capping that leaves no record anywhere
+        # is exactly the thing the audit trail exists to prevent: an agent that
+        # asked for ₹50,000 and was quietly given ₹10,000 should be visible.
+        "allowed_categories", "allowed_merchant_ids", "clamps_applied",
+        "cumulative_cap_paise", "currency", "expires_at", "mandate_id",
+        "max_amount_paise", "max_transactions", "prompt_playback",
     },
     "AUTHORIZATION_GRANTED": {
         "allowed_categories", "allowed_merchant_ids", "clamps_applied",

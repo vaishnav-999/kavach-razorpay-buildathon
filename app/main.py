@@ -1,9 +1,10 @@
 """Kavach application factory.
 
 M0 wires configuration validation at startup, /health, the seed and the static
-mount. M2 adds the §7 merchant plane. M3 adds §12 payments, plus the temporary
-dev checkout scaffolding that M5 deletes. M4 adds the §12.5 webhook.
-Later routers arrive with their milestones.
+mount. M2 adds the §7 merchant plane. M3 adds §12 payments. M4 adds the §12.5
+webhook. M5 adds the §8 Mandate Authority and, with it, the Transaction Guard
+behind `POST /merchant/checkout/submit`. Later routers arrive with their
+milestones.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from app.merchant.router import public_router as merchant_public_router
 from app.merchant.router import router as merchant_router
 from app.merchant.seed import seed_database
 from app.platform import dev as dev_scaffold
+from app.platform.mandate import router as mandate_router
 from app.platform.payments import router as payments_router
 from app.platform.webhooks import router as webhooks_router
 from app.schemas import HealthOut
@@ -89,10 +91,12 @@ def create_app() -> FastAPI:
     # production; the §15 replay demo POSTs a stored body back to it.
     app.include_router(webhooks_router)
 
-    # TODO(M5): delete these two lines and app/platform/dev.py with them. The
-    # scaffolding exists only so M3 can prove the Razorpay rail end to end
-    # before the Transaction Guard is there to authorise anything.
-    app.include_router(dev_scaffold.api_router)
+    # §8 — the Mandate Authority. Propose grants nothing; only issue signs.
+    app.include_router(mandate_router)
+
+    # §12.3 — the checkout page. The M3 scaffolding that created orders without
+    # a guard decision is gone; what remains is the page that pays an order the
+    # Guard already authorised. M7 replaces it with the §14 frontend.
     app.include_router(dev_scaffold.page_router)
 
     # The built frontend lands here (M7). The directory is gitignored, so make

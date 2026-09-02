@@ -2,10 +2,12 @@
 
 Three things live here:
 
+* **§9.4** `execute_authorized_purchase()` — the **single call site** of
+  `guard.evaluate()`. On BLOCK it raises `GuardBlocked` and everything below
+  the raise is unreachable: no merchant submit, no Razorpay order.
 * **§12.2** `create_razorpay_order()` — the one function that turns a signed
-  quote into a Razorpay order. In M5 it is called from
-  `execute_authorized_purchase()`, immediately below the single
-  `guard.evaluate()` call site, and it is reachable only on ALLOW.
+  quote into a Razorpay order. It is called from the merchant's
+  `submit_checkout()`, which is itself reachable only below an ALLOW.
 * **§12.4** `verify_checkout_signature()` — HMAC-SHA256 over
   `razorpay_order_id|razorpay_payment_id`, keyed by `RAZORPAY_KEY_SECRET`,
   using **our** stored order id. One of only two places that may write
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, NoReturn
 
@@ -33,8 +36,9 @@ from app.config import settings
 from app.db import get_db
 from app.errors import KavachError
 from app.ids import new_correlation_id, new_order_id, new_payment_id
-from app.models import Order, Payment, Quote
-from app.platform import razorpay_client
+from app.models import Mandate, Order, Payment, Quote
+from app.platform import guard, razorpay_client
+from app.platform.guard import GuardBlocked, GuardResult
 from app.schemas import PaymentOut
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
@@ -55,6 +59,79 @@ def get_order(db: Session, order_id: str) -> Order:
     return order
 
 
+# -- 9.4 the single guard call site ----------------------------------------
+
+
+@dataclass(frozen=True)
+class PurchaseResult:
+    guard: GuardResult
+    order: Order
+    # True when the Idempotency-Key had already produced this order (§7.8).
+    replayed: bool = False
+
+
+def execute_authorized_purchase(
+    db: Session,
+    *,
+    session_id: str | None,
+    correlation_id: str,
+    mandate_id: str,
+    quote_id: str,
+    merchant_id: str,
+    requested_total_paise: int,
+    currency: str,
+    idempotency_key: str,
+) -> PurchaseResult:
+    """The one and only call site of `guard.evaluate()` (§9.4).
+
+    Everything below the `raise` is unreachable on BLOCK. Test 10 proves it
+    mechanically: monkeypatch `razorpay_client.create_order` to raise on call,
+    run a BLOCK path, and assert it completes cleanly with the mock never
+    invoked.
+
+    `idempotency_key` is not in the §9.4 sketch but §7.8 requires one and
+    §11.2's `submit_purchase` tool carries it, so it is threaded through here.
+    """
+    result = guard.evaluate(
+        db,
+        correlation_id=correlation_id,
+        session_id=session_id,
+        mandate_id=mandate_id,
+        quote_id=quote_id,
+        merchant_id=merchant_id,
+        requested_total_paise=requested_total_paise,
+        currency=currency,
+        now=datetime.now(timezone.utc),
+    )
+
+    if result.verdict == "BLOCK":
+        raise GuardBlocked(result)  # <- no merchant call, no Razorpay call
+
+    # Only reachable on ALLOW.
+    #
+    # Imported here rather than at module level: `app/merchant/service.py`
+    # imports this module to reach the Razorpay rail, and one of the two has to
+    # be the late one.
+    from app.merchant import service as merchant
+
+    # MG-001 passed, so the mandate exists and is signed. The merchant is
+    # handed the signed artifact and verifies it with the Mandate Authority
+    # public key alone — it never sees this row (§10, CV-001).
+    mandate = db.get(Mandate, mandate_id)
+
+    order, replayed = merchant.submit_checkout(
+        db,
+        quote_id=quote_id,
+        mandate_signing_payload=mandate.signing_payload if mandate else None,
+        mandate_signature=mandate.signature if mandate else None,
+        guard_decision_id=result.decision_id,
+        idempotency_key=idempotency_key,
+        correlation_id=correlation_id,
+        session_id=session_id,
+    )
+    return PurchaseResult(guard=result, order=order, replayed=replayed)
+
+
 # -- 12.2 order creation ---------------------------------------------------
 
 
@@ -66,6 +143,7 @@ def create_razorpay_order(
     guard_decision_id: str,
     idempotency_key: str,
     session_id: str | None = None,
+    correlation_id: str | None = None,
 ) -> Order:
     """Create our `orders` row and the Razorpay order behind it (§12.2).
 
@@ -81,7 +159,7 @@ def create_razorpay_order(
         return existing
 
     order_id = new_order_id()
-    correlation_id = quote.correlation_id or new_correlation_id()
+    correlation_id = correlation_id or quote.correlation_id or new_correlation_id()
 
     order = Order(
         id=order_id,

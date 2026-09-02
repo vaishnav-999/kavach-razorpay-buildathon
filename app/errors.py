@@ -26,6 +26,9 @@ ERROR_STATUS: dict[str, int] = {
     "CART_NOT_FOUND": 404,
     "QUOTE_NOT_FOUND": 404,
     "ORDER_NOT_FOUND": 404,
+    # §8.1's mandate endpoints are new in M5; §18.2 enumerates the *_NOT_FOUND
+    # family without naming this one. Same family, same status.
+    "MANDATE_NOT_FOUND": 404,
     "CART_NOT_OPEN": 409,
     "IDEMPOTENCY_KEY_REQUIRED": 400,
     # checkout validator (§10)

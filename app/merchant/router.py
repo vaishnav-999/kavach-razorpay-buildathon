@@ -4,9 +4,9 @@ Two routers. `public_router` serves `/.well-known/*` with no authentication —
 a merchant profile is meant to be discoverable. `router` serves `/merchant/*`
 and requires `X-Merchant-API-Key`.
 
-`POST /merchant/checkout/submit` is deliberately absent. It arrives in M5, once
-the Transaction Guard exists, because there is no honest way to accept a
-submit before there is something to authorise it.
+`POST /merchant/checkout/submit` (§7.8) is idempotent before it is anything
+else: a repeated `Idempotency-Key` returns the original response body with
+`X-Idempotent-Replay: true` and never reaches the validator or Razorpay.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -141,6 +141,41 @@ class QuoteResponse(BaseModel):
     # guess the canonical form (§6.2).
     signing_payload: dict[str, Any]
     signature: str
+
+
+class CheckoutSubmitIn(BaseModel):
+    quote_id: str
+    # The mandate as data. The merchant verifies the signature over
+    # `mandate_signing_payload` with the Mandate Authority public key and never
+    # reads a mandate row (§10, CV-001); `mandate` itself is carried for
+    # display and is not trusted for anything.
+    mandate: dict[str, Any] | None = None
+    mandate_signature: str
+    mandate_signing_payload: dict[str, Any]
+    # Not in §7.8's list of body keys, but §7.8 step 4 requires the order to
+    # carry one and `orders.guard_decision_id` is NOT NULL. An HTTP caller has
+    # to name the decision that authorised this, and it has to be an ALLOW.
+    guard_decision_id: str
+    correlation_id: str | None = None
+    session_id: str | None = None
+
+
+class CheckoutSubmitOut(BaseModel):
+    """Derived entirely from the order row, so an idempotent replay returns
+    exactly the body the first call returned."""
+
+    order_id: str
+    merchant_id: str
+    quote_id: str
+    mandate_id: str
+    guard_decision_id: str
+    correlation_id: str
+    amount_paise: int
+    currency: str
+    status: str
+    razorpay_order_id: str | None = None
+    receipt: str | None = None
+    line_items: list[QuoteLineItem]
 
 
 class MerchantOrderOut(BaseModel):
@@ -276,6 +311,55 @@ def checkout_quote(body: QuoteIn, db: Session = Depends(get_db)) -> QuoteRespons
         status=quote.status,
         signing_payload=quote.signing_payload,
         signature=quote.signature,
+    )
+
+
+@router.post("/checkout/submit", response_model=CheckoutSubmitOut)
+def checkout_submit(
+    body: CheckoutSubmitIn,
+    response: Response,
+    db: Session = Depends(get_db),
+    idempotency_key: str | None = Header(default=None),
+) -> CheckoutSubmitOut:
+    """§7.8 — the only path to an order.
+
+    A missing `Idempotency-Key` is `400 IDEMPOTENCY_KEY_REQUIRED`. A repeated
+    one returns the original response with `200` and `X-Idempotent-Replay:
+    true`, without re-validating and without a second Razorpay order.
+    """
+    if not idempotency_key:
+        raise KavachError(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            "POST /merchant/checkout/submit requires an Idempotency-Key header.",
+            correlation_id=body.correlation_id,
+        )
+
+    order, replayed = service.submit_checkout(
+        db,
+        quote_id=body.quote_id,
+        mandate_signing_payload=body.mandate_signing_payload,
+        mandate_signature=body.mandate_signature,
+        guard_decision_id=body.guard_decision_id,
+        idempotency_key=idempotency_key,
+        correlation_id=body.correlation_id,
+        session_id=body.session_id,
+    )
+    if replayed:
+        response.headers["X-Idempotent-Replay"] = "true"
+
+    return CheckoutSubmitOut(
+        order_id=order.id,
+        merchant_id=order.merchant_id,
+        quote_id=order.quote_id,
+        mandate_id=order.mandate_id,
+        guard_decision_id=order.guard_decision_id,
+        correlation_id=order.correlation_id,
+        amount_paise=order.amount_paise,
+        currency=order.currency,
+        status=order.status,
+        razorpay_order_id=order.razorpay_order_id,
+        receipt=order.receipt,
+        line_items=[QuoteLineItem(**li) for li in order.line_items],
     )
 
 
