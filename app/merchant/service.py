@@ -348,15 +348,30 @@ def get_order(db: Session, order_id: str) -> tuple[Order, Payment | None]:
 # ── submit (§7.8) ─────────────────────────────────────────────────────────
 
 
-def _require_allow_decision(db: Session, guard_decision_id: str) -> GuardDecision:
+def _require_allow_decision(
+    db: Session, guard_decision_id: str, quote: Quote
+) -> GuardDecision:
     """Invariant 2 at the merchant boundary.
 
     §10's "must not query buyer or platform tables" is scoped to CV-001's
     mandate verification, and for good reason: a real merchant cannot see our
     tables. This is a different question — *did the platform actually
     authorise this?* — and it is the one property the whole project rests on,
-    so it is checked here as well as at the call site. An HTTP caller that
-    names a BLOCK decision, or a decision for a different quote, gets nothing.
+    so it is checked here as well as at the call site.
+
+    Two things are checked, and the second is what makes the first mean
+    anything:
+
+    1. the named decision exists and its verdict is `ALLOW`;
+    2. that decision was reached about **this** submission — same quote, same
+       amount, same merchant.
+
+    Without (2), any past `ALLOW` is a bearer token: a caller could attach a
+    decision reached about a 516 000 cart to a fresh, independently valid
+    756 000 cart and be charged the larger amount, because MG-005, MG-006 and
+    MG-009 were evaluated against a total that is not the one being charged.
+    The validator would not catch it — CV-001 to CV-004 never look at the
+    amount against the mandate. Only this comparison does.
     """
     decision = db.get(GuardDecision, guard_decision_id)
     if decision is None or decision.verdict != "ALLOW":
@@ -370,6 +385,28 @@ def _require_allow_decision(db: Session, guard_decision_id: str) -> GuardDecisio
                 "threshold": "ALLOW",
             },
         )
+
+    # An authorisation is for one quote, one amount, at one merchant. It does
+    # not transfer to another submission.
+    for field, observed, expected in (
+        ("quote_id", decision.quote_id, quote.id),
+        ("requested_total_paise", decision.requested_total_paise, quote.total_paise),
+        ("merchant_id", decision.merchant_id, quote.merchant_id),
+    ):
+        if observed != expected:
+            raise KavachError(
+                "MERCHANT_MANDATE_INVALID",
+                f"Guard decision {decision.id} was not reached about this "
+                f"submission: its {field} is {observed!r}, this submission's "
+                f"is {expected!r}. An authorisation does not transfer between "
+                "quotes.",
+                detail={
+                    "guard_decision_id": decision.id,
+                    "field": field,
+                    "observed": observed,
+                    "expected": expected,
+                },
+            )
     return decision
 
 
@@ -420,7 +457,7 @@ def submit_checkout(
     now = now or datetime.now(timezone.utc)
     mandate_id = str((mandate_signing_payload or {}).get("mandate_id") or "")
 
-    decision = _require_allow_decision(db, guard_decision_id)
+    decision = _require_allow_decision(db, guard_decision_id, quote)
 
     # 2. The Checkout Validator. CV-002 takes the row locks §7.8 step 3 calls
     #    for, and hands them back so the decrement below happens under them.
