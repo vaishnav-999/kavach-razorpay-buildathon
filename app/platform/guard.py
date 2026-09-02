@@ -571,6 +571,42 @@ def _prior_allows(db: Session, mandate_id: str) -> tuple[int, int]:
     return len(rows), sum(int(r.requested_total_paise) for r in rows)
 
 
+def result_from_row(decision: GuardDecision, *, currency: str) -> GuardResult:
+    """Rebuild the §9.3 result from a stored `guard_decisions` row.
+
+    Used on the idempotent replay path in `execute_authorized_purchase()`,
+    which must return the decision that actually authorised the original order
+    rather than reach a fresh one. All nine rules were persisted on ALLOW as
+    well as BLOCK (invariant 10), so nothing has to be recomputed and nothing
+    is invented here.
+    """
+    rules = tuple(
+        RuleResult(
+            rule_id=str(rule.get("rule_id")),
+            passed=bool(rule.get("passed")),
+            observed=rule.get("observed"),
+            threshold=rule.get("threshold"),
+            unit=str(rule.get("unit") or ""),
+            detail=str(rule.get("detail") or ""),
+        )
+        for rule in (decision.rules or [])
+    )
+    return GuardResult(
+        verdict=decision.verdict,
+        decision_id=decision.id,
+        correlation_id=decision.correlation_id,
+        mandate_id=decision.mandate_id or "",
+        quote_id=decision.quote_id or "",
+        requested_total_paise=int(decision.requested_total_paise),
+        currency=currency,
+        evaluated_at=_aware(decision.evaluated_at),
+        duration_ms=int(decision.duration_ms),
+        failed_rule_id=decision.failed_rule_id,
+        block_code=decision.block_code,
+        rules=rules,
+    )
+
+
 def evaluate(
     db: Session,
     *,

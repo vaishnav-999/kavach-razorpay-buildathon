@@ -36,7 +36,7 @@ from app.config import settings
 from app.db import get_db
 from app.errors import KavachError
 from app.ids import new_correlation_id, new_order_id, new_payment_id
-from app.models import Mandate, Order, Payment, Quote
+from app.models import GuardDecision, Mandate, Order, Payment, Quote
 from app.platform import guard, razorpay_client
 from app.platform.guard import GuardBlocked, GuardResult
 from app.schemas import PaymentOut
@@ -92,6 +92,35 @@ def execute_authorized_purchase(
     `idempotency_key` is not in the §9.4 sketch but §7.8 requires one and
     §11.2's `submit_purchase` tool carries it, so it is threaded through here.
     """
+    # Step 1 of §7.8, hoisted above the Guard: a retry of a submission that
+    # already produced an order returns that order and stops.
+    #
+    # This has to come first, and it does not weaken invariant 2. A replay is
+    # not a second purchase — the original passed a Guard ALLOW, the stored
+    # decision is returned rather than a fresh one, and no new order and no new
+    # Razorpay order comes into existence, so there is still no order without
+    # an ALLOW behind it.
+    #
+    # Evaluating the Guard first would instead make honest retries fail: by the
+    # time the retry arrives the quote is CONSUMED and the cart is closed, so
+    # MG-008 blocks on `quote_consumed` and the caller is told its own
+    # successful purchase was refused. That is a false BLOCK about a purchase
+    # that was in fact authorised, and it would put a lie in the audit trail.
+    existing = db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
+    if existing is not None:
+        decision = db.get(GuardDecision, existing.guard_decision_id)
+        if decision is None:  # pragma: no cover - NOT NULL FK makes this unreachable
+            raise KavachError(
+                "INTERNAL_ERROR",
+                f"Order {existing.id} names a guard decision that does not exist.",
+                correlation_id=existing.correlation_id,
+            )
+        return PurchaseResult(
+            guard=guard.result_from_row(decision, currency=existing.currency),
+            order=existing,
+            replayed=True,
+        )
+
     result = guard.evaluate(
         db,
         correlation_id=correlation_id,
@@ -130,6 +159,49 @@ def execute_authorized_purchase(
         session_id=session_id,
     )
     return PurchaseResult(guard=result, order=order, replayed=replayed)
+
+
+def execute_purchase_for_quote(
+    db: Session,
+    *,
+    session_id: str | None,
+    correlation_id: str,
+    quote_id: str,
+    mandate_id: str,
+    idempotency_key: str,
+) -> PurchaseResult:
+    """What `submit_purchase` (§11.2) calls. Reads the figure off the quote.
+
+    The buyer plane never names a sum. §11.2 forbids a monetary parameter on
+    any tool, so the amount cannot arrive from the agent, and this function
+    reads `quotes.total_paise` — the number the merchant signed — and hands
+    that to the Guard.
+
+    MG-008 still compares the requested sum against the signed one and is not
+    weakened by that: it remains live for every other caller of
+    `execute_authorized_purchase`, including the merchant HTTP submit path,
+    where the number does arrive from outside.
+    """
+    quote = db.get(Quote, quote_id)
+    if quote is None:
+        raise KavachError(
+            "QUOTE_NOT_FOUND",
+            f"No quote with id {quote_id}.",
+            correlation_id=correlation_id,
+            detail={"quote_id": quote_id},
+        )
+
+    return execute_authorized_purchase(
+        db,
+        session_id=session_id,
+        correlation_id=correlation_id,
+        mandate_id=mandate_id,
+        quote_id=quote.id,
+        merchant_id=quote.merchant_id,
+        requested_total_paise=int(quote.total_paise),
+        currency=quote.currency,
+        idempotency_key=idempotency_key,
+    )
 
 
 # -- 12.2 order creation ---------------------------------------------------

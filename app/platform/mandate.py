@@ -34,7 +34,7 @@ from app.crypto import public_key_hex, sign
 from app.db import get_db
 from app.errors import KavachError
 from app.ids import new_correlation_id, new_mandate_id
-from app.models import Mandate, Merchant
+from app.models import Mandate, Merchant, Quote
 from app.schemas import MandateOut
 
 router = APIRouter(prefix="/api/mandates", tags=["mandate"])
@@ -329,6 +329,71 @@ def propose(
     )
     db.commit()
     return mandate
+
+
+def propose_for_quote(
+    db: Session,
+    *,
+    quote_id: str,
+    user_email: str,
+    session_id: str | None,
+    correlation_id: str | None,
+) -> tuple[Mandate, Quote]:
+    """What the agent's `propose_mandate` tool calls (§11.2).
+
+    Every limit is derived here, from the **signed** quote, because §11.2
+    forbids any tool from accepting a sum. The agent names a quote and nothing
+    else; it cannot propose authority larger than the thing it is proposing to
+    buy, and it cannot widen the merchant or category allowlist beyond what the
+    merchant actually signed.
+
+    This still grants nothing. The row is `PROPOSED` with a null signature, so
+    MG-001 fails against it by construction. Only `issue()` signs, and only the
+    human calls that.
+    """
+    quote = db.get(Quote, quote_id)
+    if quote is None:
+        raise KavachError(
+            "QUOTE_NOT_FOUND",
+            f"No quote with id {quote_id}.",
+            correlation_id=correlation_id,
+            detail={"quote_id": quote_id},
+        )
+
+    # From the signed line items, not from the display copy: the categories the
+    # mandate allows are the ones the merchant put its signature over.
+    signed_line_items = (quote.signing_payload or {}).get("line_items") or []
+    signed_skus = {str(li.get("sku")) for li in signed_line_items}
+    categories = sorted(
+        {
+            str(li.get("category"))
+            for li in (quote.line_items or [])
+            if li.get("category") and str(li.get("sku")) in signed_skus
+        }
+    )
+
+    if not categories:
+        # A quote whose display lines carry no category still has to produce a
+        # bounded allowlist, and an empty one is rejected by `clamp()`. The
+        # merchant's own category is the narrowest honest answer.
+        merchant = db.get(Merchant, quote.merchant_id)
+        categories = [merchant.category] if merchant else []
+
+    mandate = propose(
+        db,
+        user_email=user_email,
+        session_id=session_id,
+        correlation_id=correlation_id or quote.correlation_id,
+        currency=quote.currency,
+        # Exactly this quote, once. The §8.3 clamps still apply on top.
+        max_amount_paise=int(quote.total_paise),
+        cumulative_cap_paise=int(quote.total_paise),
+        max_transactions=1,
+        ttl_minutes=DEFAULT_TTL_MINUTES,
+        allowed_merchant_ids=[quote.merchant_id],
+        allowed_categories=categories,
+    )
+    return mandate, quote
 
 
 # ── issue (§8.3, §8.5) ────────────────────────────────────────────────────

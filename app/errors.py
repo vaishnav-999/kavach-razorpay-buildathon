@@ -29,6 +29,8 @@ ERROR_STATUS: dict[str, int] = {
     # §8.1's mandate endpoints are new in M5; §18.2 enumerates the *_NOT_FOUND
     # family without naming this one. Same family, same status.
     "MANDATE_NOT_FOUND": 404,
+    # Same family again, for the §11.6 agent session endpoints.
+    "SESSION_NOT_FOUND": 404,
     "CART_NOT_OPEN": 409,
     "IDEMPOTENCY_KEY_REQUIRED": 400,
     # checkout validator (§10)

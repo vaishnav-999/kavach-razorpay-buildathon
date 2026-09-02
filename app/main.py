@@ -18,6 +18,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
+from app.buyer.router import router as buyer_router
 from app.config import settings
 from app.db import SessionLocal
 from app.errors import install_exception_handlers
@@ -93,6 +94,10 @@ def create_app() -> FastAPI:
 
     # §8 — the Mandate Authority. Propose grants nothing; only issue signs.
     app.include_router(mandate_router)
+
+    # §11.6 — the buyer agent. The only place an LLM is reachable from,
+    # and the only place a human grants authority.
+    app.include_router(buyer_router)
 
     # §12.3 — the checkout page. The M3 scaffolding that created orders without
     # a guard decision is gone; what remains is the page that pays an order the

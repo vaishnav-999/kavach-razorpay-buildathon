@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = ""
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = ""
+    # Optional self-throttle: seconds to hold between Gemini calls. 0 is
+    # off. Raise it to stay under a free-tier per-minute quota without
+    # touching code; it trades wall clock for headroom.
+    GEMINI_MIN_CALL_INTERVAL_SECONDS: float = 0.0
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-4-6"
 
