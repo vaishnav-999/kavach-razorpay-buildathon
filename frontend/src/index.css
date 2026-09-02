@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    /* Elevation 0. Panels sit on zinc-900 above this, controls on zinc-950
+       inside them — three distinct levels, not an inverted light theme. */
+    @apply bg-zinc-950 text-zinc-100 font-sans text-sm antialiased;
+  }
+
+  /* Dense instrument scrollbars. */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-zinc-800 rounded-input;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-zinc-700;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-1 ring-accent ring-offset-0;
+  }
+}
+
+@layer components {
+  /* Elevation 1: every panel is the same card. */
+  .panel {
+    @apply flex min-h-0 flex-col rounded-card border border-zinc-800 bg-zinc-900;
+  }
+
+  .panel-head {
+    @apply flex h-10 shrink-0 items-center gap-2 border-b border-zinc-800 px-4;
+  }
+
+  .panel-title {
+    @apply font-mono text-xs font-medium uppercase tracking-widest text-zinc-400;
+  }
+
+  .panel-body {
+    @apply min-h-0 flex-1 overflow-y-auto;
+  }
+
+  /* Elevation 2, inset: inputs and code wells. */
+  .well {
+    @apply rounded-input border border-zinc-800 bg-zinc-950;
+  }
+
+  .btn {
+    @apply inline-flex h-8 items-center gap-2 rounded-input border border-zinc-800
+           bg-zinc-900 px-3 font-medium text-zinc-300 transition-colors duration-150
+           ease-out hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-100
+           disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .btn-primary {
+    @apply border-accent bg-accent text-zinc-950 hover:border-accent
+           hover:bg-accent-muted hover:text-zinc-50;
+  }
+
+  .field {
+    @apply h-8 w-full rounded-input border border-zinc-800 bg-zinc-950 px-2
+           font-mono text-sm text-zinc-100 transition-colors duration-150 ease-out
+           placeholder:text-zinc-600 hover:border-zinc-700 focus:border-accent;
+  }
+
+  .label {
+    @apply text-xs font-medium uppercase tracking-widest text-zinc-500;
+  }
+
+  /* Every id, code and amount in the app renders through this. */
+  .mono {
+    @apply font-mono tabular-nums;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-input bg-zinc-800;
+  }
+
+  /* The nine rule rows. One grid, so rule id, observed and threshold line up
+     down the whole console and a photograph of it is self-explanatory. */
+  .rule-grid {
+    display: grid;
+    grid-template-columns: 8px 76px minmax(0, 1fr) 168px 168px;
+    align-items: baseline;
+    column-gap: 16px;
+  }
+
+  @media (max-width: 1280px) {
+    .rule-grid {
+      grid-template-columns: 8px 76px minmax(0, 1fr) 120px 120px;
+    }
+  }
+
+  /* Left column narrates, right column is the evidence, and the evidence gets
+     slightly more width because the guard console is read from a distance. */
+  .console-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (min-width: 1024px) {
+    .console-grid {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    }
+  }
+
+  /* The right column's proportions. The guard console gets the space. */
+  .col-guard {
+    flex: 3 1 0%;
+  }
+  .col-audit {
+    flex: 2 1 0%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+}

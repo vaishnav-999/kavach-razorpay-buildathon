@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.audit import emit
 from app.models import AgentSession
 
-# §11.3, verbatim, plus two edges that the diagram implies rather than draws:
+# §11.3, verbatim, plus three edges that the diagram implies rather than draws:
 #
 # * `QUOTED -> SUBMITTING` lets the second of the two permitted submit attempts
 #   proceed without asking the human the same question twice. `agent.py` allows
@@ -28,6 +28,17 @@ from app.models import AgentSession
 #   Guard re-runs all nine rules on every submission.
 # * `BLOCKED -> CART_BUILDING` is the re-plan arrow up the left-hand side of
 #   the §11.3 diagram.
+# * `BLOCKED -> DISCOVERING` is the same re-plan arrow taken one step further
+#   back. An agent that has just been blocked sometimes restarts from the
+#   registry rather than from the cart, and halting it there kills the re-plan
+#   the demo rests on. Allowing it weakens nothing: `discover_merchants` reads a
+#   public registry, takes no arguments, touches no cart, no quote and no
+#   mandate, and grants no authority. The route back to a purchase still runs
+#   through a fresh signed quote and the Guard's nine rules, and the mandate the
+#   Guard checks is unchanged — an agent that loops through discovery forever
+#   only spends its own §11.4 tool budget. `guidance_for()` tells it to rebuild
+#   the cart within the stated cap instead, so this edge is the safety net
+#   rather than the intended path.
 LEGAL_TRANSITIONS: dict[str, set[str]] = {
     "INIT": {"DISCOVERING", "HALTED"},
     "DISCOVERING": {"DISCOVERING", "EVALUATING", "HALTED"},
@@ -43,7 +54,7 @@ LEGAL_TRANSITIONS: dict[str, set[str]] = {
     "AWAITING_AUTHORIZATION": {"AUTHORIZED", "HALTED", "EXPIRED"},
     "AUTHORIZED": {"SUBMITTING", "HALTED"},
     "SUBMITTING": {"ORDER_CREATED", "BLOCKED", "HALTED"},
-    "BLOCKED": {"CART_BUILDING", "EVALUATING", "HALTED"},
+    "BLOCKED": {"CART_BUILDING", "EVALUATING", "DISCOVERING", "HALTED"},
     # Terminal (§11.3).
     "ORDER_CREATED": set(),
     "HALTED": set(),

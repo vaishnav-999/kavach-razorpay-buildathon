@@ -26,8 +26,10 @@ from app.merchant.router import public_router as merchant_public_router
 from app.merchant.router import router as merchant_router
 from app.merchant.seed import seed_database
 from app.platform import dev as dev_scaffold
+from app.platform.audit_router import router as audit_router
 from app.platform.mandate import router as mandate_router
 from app.platform.payments import router as payments_router
+from app.platform.ui_router import router as ui_router
 from app.platform.webhooks import router as webhooks_router
 from app.schemas import HealthOut
 
@@ -98,6 +100,15 @@ def create_app() -> FastAPI:
     # §11.6 — the buyer agent. The only place an LLM is reachable from,
     # and the only place a human grants authority.
     app.include_router(buyer_router)
+
+    # §13.3 — the audit chain. Judge check #3, and what the AuditTrace panel
+    # and the Guard console both read from: the SSE stream narrates a run, this
+    # endpoint is the record of it.
+    app.include_router(audit_router)
+
+    # §14 — the two reads the browser needs: the Razorpay key id at runtime,
+    # and the §7.9 order view without handing a bundle the merchant API key.
+    app.include_router(ui_router)
 
     # §12.3 — the checkout page. The M3 scaffolding that created orders without
     # a guard decision is gone; what remains is the page that pays an order the

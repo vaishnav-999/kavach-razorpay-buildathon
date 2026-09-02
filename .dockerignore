@@ -7,3 +7,6 @@ node_modules/
 .env
 cassettes/
 *.md
+
+# The console is built by the node stage, never copied from the host.
+app/static/

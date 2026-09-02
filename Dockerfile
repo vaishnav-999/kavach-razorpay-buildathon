@@ -1,17 +1,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# STAGE 1 — frontend build. Added at M7 (BUILD_SPEC §19.1):
+# STAGE 1 — the frontend (BUILD_SPEC §14, §19.1).
 #
-#   FROM node:20-alpine AS frontend
-#   WORKDIR /build
-#   COPY frontend/package*.json ./
-#   RUN npm ci
-#   COPY frontend/ ./
-#   RUN npm run build                 # vite build.outDir = '../app/static'
-#
-# Stage 2 then does:  COPY --from=frontend /app/static ./app/static
-# Until M7, app/static/ holds only the placeholder index.html.
+# Vite writes to `build.outDir = '../app/static'`, so from /build the bundle
+# lands at /app/static. The python stage copies that directory; nothing about
+# the frontend — node, npm, node_modules — survives into the runtime image.
 # ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS frontend
 
+WORKDIR /build
+
+# Dependencies first, so a source-only change does not re-resolve the tree.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 2 — the application.
+# ─────────────────────────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -31,6 +38,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 COPY app/ ./app/
+
+# The built console. Copied after app/ so the image always carries the bundle
+# this build produced, never one left over in a developer's working tree.
+COPY --from=frontend /app/static ./app/static
 
 EXPOSE 8000
 
