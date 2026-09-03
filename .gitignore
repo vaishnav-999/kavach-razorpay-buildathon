@@ -6,3 +6,5 @@ app/static/*
 node_modules/
 .venv/
 .pytest_cache/
+msg.json
+HANDOVER.md
