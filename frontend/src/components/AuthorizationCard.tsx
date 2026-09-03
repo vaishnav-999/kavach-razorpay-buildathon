@@ -1,10 +1,12 @@
-// §8, §14 — the moment a human grants authority.
+// §8, §14 — the moment a human grants authority, and the dominant element on
+// the screen while it is pending.
 //
 // The card renders a PROPOSED mandate: a row with no signature and therefore no
 // authority at all. `prompt_playback` is generated server-side from the clamped
-// columns (§8.4), never from model output, and it is shown first because it is
-// the sentence the human is actually agreeing to. The agent's own justification
-// appears below it, labelled as the agent's, so the two can never be confused.
+// columns (§8.4), never from model output, and it is shown first and largest
+// because it is the sentence the human is actually agreeing to. The agent's own
+// justification appears below it, labelled as the agent's, so the two can never
+// be confused.
 //
 // The amount field is the one place rupees are typed rather than displayed
 // (§18.3). It is converted at the edge by `parseRupeesToPaise` and clamped
@@ -42,23 +44,25 @@ export default function AuthorizationCard({
   return (
     <Panel
       title="Authorization required"
-      icon={<KeyRound size={14} className="text-accent" />}
-      className="shrink-0 animate-panel-in"
-      right={<Badge tone="accent">{mandate.status}</Badge>}
-      bodyClassName="overflow-visible"
+      icon={<KeyRound size={14} />}
+      className="animate-panel-in"
+      right={<Badge>{mandate.status}</Badge>}
     >
+      {/* The sentence being agreed to. Largest type in this panel, by intent. */}
       <div className="border-b border-zinc-800 px-4 py-4">
-        <p className="text-base leading-6 text-zinc-100">{mandate.prompt_playback}</p>
+        <p className="max-w-[70ch] text-lg font-medium leading-7 text-zinc-100">
+          {mandate.prompt_playback}
+        </p>
         {justification ? (
-          <p className="mt-3 border-l border-zinc-700 pl-3 text-sm text-zinc-500">
+          <p className="mt-3 max-w-[70ch] border-l-2 border-zinc-800 pl-3 text-sm leading-6 text-zinc-500">
             <span className="label mr-2">agent says</span>
             {justification}
           </p>
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 border-b border-zinc-800 px-4 py-4">
-        <label className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-6 border-b border-zinc-800 px-4 py-4">
+        <label className="flex flex-col gap-1.5">
           <span className="label">max amount (₹)</span>
           <input
             className="field"
@@ -74,7 +78,7 @@ export default function AuthorizationCard({
           </span>
         </label>
 
-        <label className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1.5">
           <span className="label">expires in (minutes)</span>
           <input
             className="field"
@@ -108,7 +112,7 @@ export default function AuthorizationCard({
         </p>
       ) : null}
 
-      <div className="flex items-center gap-3 border-t border-zinc-800 px-4 py-3">
+      <div className="flex items-center gap-4 border-t border-zinc-800 bg-zinc-900/40 px-4 py-3">
         <button
           type="button"
           className="btn btn-primary"
@@ -120,7 +124,7 @@ export default function AuthorizationCard({
           <Lock size={14} />
           {busy ? 'Signing…' : 'Authorize'}
         </button>
-        <p className="text-xs leading-5 text-zinc-500">
+        <p className="max-w-[70ch] text-xs leading-5 text-zinc-500">
           Signing is the only way this becomes spendable. Limits are clamped
           server-side; you can grant less than the agent asked for, never more.
         </p>

@@ -1,13 +1,17 @@
-// §14 — the left column: intent in, narration out.
+// §14 — the left column: intent in, narration out. This leads while the agent
+// is working, and recedes into a record of what it did once a verdict lands on
+// the right.
 //
 // The composer's enabled state is derived from the session state the audit
 // chain reports (§11.3), not from anything this component remembers. A terminal
 // session offers a new session and never a retry: a run that ended on a model
 // turn cannot be continued, and pretending otherwise would send the human back
 // into a request the provider will refuse.
+//
+// The session state badge is not repeated here — it lives in the header, once.
 
 import { useState } from 'react'
-import { CornerDownLeft, OctagonX, CheckCircle2, Plus } from 'lucide-react'
+import { CornerDownLeft, OctagonX, CheckCircle2, Plus, Terminal } from 'lucide-react'
 import type { TraceItem } from '../trace'
 import AgentTrace from './AgentTrace'
 import { Panel } from './ui'
@@ -48,13 +52,20 @@ export default function ChatPanel({
   return (
     <Panel
       title="Agent"
-      icon={<CornerDownLeft size={14} />}
-      className="min-w-0"
+      icon={<Terminal size={14} />}
       bodyClassName="overflow-hidden"
       right={
-        <span className="mono text-xs uppercase tracking-widest text-zinc-500">
-          {sessionState}
-        </span>
+        streaming ? (
+          <span className="mono flex items-center gap-2 text-xs text-zinc-400">
+            <span
+              aria-hidden
+              className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400"
+            />
+            working
+          </span>
+        ) : items.length ? (
+          <span className="mono text-xs text-zinc-600">{items.length} lines</span>
+        ) : null
       }
     >
       <div className="flex h-full min-h-0 flex-col">
@@ -93,7 +104,7 @@ export default function ChatPanel({
             body="The Guard allowed this purchase and the merchant created an order. Settle it on the right; payment status comes from the merchant, never from the browser."
             action={
               <button type="button" className="btn" onClick={onNewSession}>
-                <Plus size={14} />
+                <Plus size={12} />
                 New session
               </button>
             }
@@ -101,10 +112,10 @@ export default function ChatPanel({
         ) : null}
 
         {!locked ? (
-          <div className="shrink-0 border-t border-zinc-800 p-3">
+          <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/40 p-3">
             <div className="flex items-end gap-2">
               <textarea
-                className="field h-auto min-h-16 flex-1 resize-none py-2 font-sans"
+                className="field h-auto min-h-[52px] flex-1 resize-none py-2 font-sans leading-6"
                 placeholder="What should the agent buy?"
                 rows={2}
                 value={draft}
@@ -130,7 +141,7 @@ export default function ChatPanel({
             {!items.length && !streaming ? (
               <button
                 type="button"
-                className="mt-2 text-left text-xs leading-5 text-zinc-500 transition-colors duration-150 ease-out hover:text-zinc-300"
+                className="mt-2 text-left text-xs leading-5 text-zinc-500 transition-colors duration-150 ease-out hover:text-zinc-200"
                 onClick={() => setDraft(CANONICAL_INTENT)}
               >
                 Use the canonical demo intent →
@@ -165,9 +176,9 @@ function Banner({
       <div className="flex items-center gap-2">
         {icon}
         <p className="mono text-xs font-medium uppercase tracking-wider">{title}</p>
+        <div className="ml-auto">{action}</div>
       </div>
-      <p className="mt-2 text-sm leading-6 text-zinc-300">{body}</p>
-      <div className="mt-3">{action}</div>
+      <p className="mt-2 max-w-[72ch] text-sm leading-6 text-zinc-300">{body}</p>
     </div>
   )
 }

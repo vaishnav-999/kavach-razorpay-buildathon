@@ -6,17 +6,28 @@
 // is read back from the server. `chain` is the §13.3 audit chain and `order` is
 // the §7.9 merchant view. Neither is ever patched locally from a stream event
 // or from a checkout callback; both are re-fetched and re-rendered.
+//
+// The layout is three fixed bands and two columns, and it never scrolls as a
+// whole:
+//
+//   header        identity and session state, exactly one row, never wraps
+//   ├ agent       narration — leads while the agent is working
+//   └ stage       one dominant panel + one hairline strip per receded panel,
+//                 with the audit chain collapsed at the foot of the column
+//   utility bar   §15 demo controls, the quietest thing on the screen
+//
+// Which panel is dominant is decided in `Stage` from the record. This file
+// decides nothing visual; it owns the data flow and hands it over.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, RotateCcw } from 'lucide-react'
 
 import Header from './components/Header'
 import ChatPanel from './components/ChatPanel'
-import AuthorizationCard from './components/AuthorizationCard'
-import GuardConsole from './components/GuardConsole'
+import Stage from './components/Stage'
 import AuditTrace from './components/AuditTrace'
+import DemoPanel from './components/DemoPanel'
 import InjectionPanel from './components/InjectionPanel'
-import SettlementCard from './components/SettlementCard'
 import { api, KavachApiError } from './lib/api'
 import { openCheckout } from './lib/razorpay'
 import { streamMessage, type StreamHandle } from './lib/sse'
@@ -41,7 +52,10 @@ export default function App() {
   const [chain, setChain] = useState<AuditChain | null>(null)
   const [chainLoading, setChainLoading] = useState(false)
 
-  // §16.5 — the injection screen, opened from the demo panel.
+  // The record is secondary: collapsed until asked for (progressive disclosure).
+  const [auditOpen, setAuditOpen] = useState(false)
+
+  // §16.5 — the injection screen, opened from the utility bar.
   const [injectionOpen, setInjectionOpen] = useState(false)
 
   const [justification, setJustification] = useState<string | null>(null)
@@ -268,17 +282,11 @@ export default function App() {
   const proposed = chain?.mandates.find((m) => m.status === 'PROPOSED') ?? null
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col overflow-hidden bg-zinc-950">
       <Header
         session={session}
         sessionState={sessionState}
-        demoMode={config?.demo_mode ?? false}
         onNewSession={() => void startSession()}
-        onDemoAction={() => {
-          void refreshChain()
-          void refreshOrder()
-        }}
-        onOpenInjection={() => setInjectionOpen(true)}
       />
 
       {injectionOpen ? (
@@ -294,26 +302,26 @@ export default function App() {
       ) : null}
 
       {startError ? (
-        <div className="m-2 flex items-start gap-3 rounded-card border border-fail/40 bg-fail/10 p-4">
-          <AlertTriangle size={16} className="mt-1 shrink-0 text-fail" />
-          <div>
+        <div className="flex shrink-0 items-start gap-3 border-b border-zinc-800 bg-fail/10 px-4 py-3">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0 text-fail" />
+          <div className="min-w-0">
             <p className="mono text-xs font-medium uppercase tracking-wider text-fail">
               session not started
             </p>
-            <p className="mt-1 text-sm text-zinc-300">{startError}</p>
-            <button
-              type="button"
-              className="btn mt-3"
-              onClick={() => void startSession()}
-            >
-              <RotateCcw size={14} />
-              Try again
-            </button>
+            <p className="mt-1 text-sm leading-6 text-zinc-300">{startError}</p>
           </div>
+          <button
+            type="button"
+            className="btn ml-auto shrink-0"
+            onClick={() => void startSession()}
+          >
+            <RotateCcw size={12} />
+            Try again
+          </button>
         </div>
       ) : null}
 
-      <main className="console-grid min-h-0 flex-1 gap-2 p-2">
+      <main className="console-grid min-h-0 flex-1">
         <ChatPanel
           items={items}
           streaming={streaming}
@@ -323,38 +331,46 @@ export default function App() {
           onNewSession={() => void startSession()}
         />
 
-        <div className="flex min-h-0 flex-col gap-2">
-          {proposed ? (
-            <AuthorizationCard
-              key={proposed.id}
-              mandate={proposed}
-              justification={justification}
-              busy={authBusy}
-              error={authError}
-              onAuthorize={(amount, ttl) => void authorize(proposed.id, amount, ttl)}
-            />
-          ) : null}
-
-          {orderId ? (
-            <SettlementCard
-              order={order}
-              loading={orderLoading}
-              paying={paying}
-              error={payError}
-              onPay={() => void pay()}
-              onRefresh={() => void refreshOrder()}
-            />
-          ) : null}
-
-          <GuardConsole decision={decision} loading={chainLoading && !chain} />
+        <div className="flex min-h-0 min-w-0 flex-col lg:border-l lg:border-zinc-800">
+          <Stage
+            decision={decision}
+            chainLoading={chainLoading && !chain}
+            proposed={proposed}
+            justification={justification}
+            authBusy={authBusy}
+            authError={authError}
+            onAuthorize={(amount, ttl) =>
+              proposed ? void authorize(proposed.id, amount, ttl) : undefined
+            }
+            orderId={orderId}
+            order={order}
+            orderLoading={orderLoading}
+            paying={paying}
+            payError={payError}
+            onPay={() => void pay()}
+            onRefreshOrder={() => void refreshOrder()}
+          />
 
           <AuditTrace
             chain={chain}
             correlationId={correlationId}
             loading={chainLoading && !chain}
+            open={auditOpen}
+            onToggle={() => setAuditOpen((v) => !v)}
           />
         </div>
       </main>
+
+      {config?.demo_mode ? (
+        <DemoPanel
+          session={session}
+          onAction={() => {
+            void refreshChain()
+            void refreshOrder()
+          }}
+          onOpenInjection={() => setInjectionOpen(true)}
+        />
+      ) : null}
     </div>
   )
 }

@@ -4,17 +4,14 @@
 // authority and no money: every figure in it came out of a tool result the
 // server produced, and the record of the run is the audit chain on the right,
 // not this list.
+//
+// Nothing here is accent-coloured. The accent belongs to primary actions; a
+// narration line is neither an action nor a status.
 
 import { useEffect, useRef, useState } from 'react'
-import {
-  AlertTriangle,
-  ChevronRight,
-  CircleDot,
-  User,
-} from 'lucide-react'
+import { AlertTriangle, ChevronRight, User } from 'lucide-react'
 import type { TraceItem } from '../trace'
 import { clockTime } from '../lib/format'
-import { Empty } from './ui'
 
 export default function AgentTrace({
   items,
@@ -29,23 +26,62 @@ export default function AgentTrace({
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [items.length, streaming])
 
+  // The empty state is the first thing a viewer who has never seen this system
+  // reads, so it says what is about to happen rather than sitting blank. Kept
+  // to its own measure: three lines of scaffolding, not a marketing panel.
   if (!items.length) {
     return (
-      <Empty>
-        Describe what you want bought. The agent discovers merchants, builds a
-        cart and asks you for authority — it cannot spend without it.
-      </Empty>
+      <div className="px-4 py-3">
+        <p className="max-w-[58ch] text-sm leading-6 text-zinc-300">
+          Describe what you want bought. The agent discovers merchants, builds a
+          cart and asks you for authority — it cannot spend without it.
+        </p>
+
+        <ol className="mt-5 flex max-w-[58ch] flex-col gap-3">
+          {[
+            [
+              'The agent works',
+              'It searches the catalog and builds a cart. Merchant text is untrusted input and is never treated as instruction.',
+            ],
+            [
+              'You grant authority',
+              'A mandate is proposed, you sign it, and the limits are clamped server-side. Until then it grants nothing.',
+            ],
+            [
+              'The Guard decides',
+              'Nine rules run at the one call site. No payment order exists unless the verdict is ALLOW.',
+            ],
+          ].map(([title, body], i) => (
+            <li key={title} className="flex gap-3">
+              <span className="mono mt-px shrink-0 text-xs text-zinc-600">
+                {i + 1}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-zinc-300">
+                  {title}
+                </span>
+                <span className="mt-0.5 block text-sm leading-6 text-zinc-500">
+                  {body}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-1 px-4 py-4">
+    <div className="flex flex-col gap-0.5 px-4 py-3">
       {items.map((item, i) => (
         <Line key={i} item={item} />
       ))}
       {streaming ? (
-        <div className="mono animate-trace-in flex items-center gap-2 py-2 text-xs text-zinc-600">
-          <CircleDot size={12} className="animate-pulse text-accent" />
+        <div className="mono flex animate-trace-in items-center gap-2 py-1.5 text-xs text-zinc-500">
+          <span
+            aria-hidden
+            className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500"
+          />
           working…
         </div>
       ) : null}
@@ -58,8 +94,8 @@ function Line({ item }: { item: TraceItem }) {
   switch (item.kind) {
     case 'user':
       return (
-        <div className="animate-trace-in flex gap-3 rounded-card border border-zinc-800 bg-zinc-950 px-3 py-3">
-          <User size={14} className="mt-1 shrink-0 text-accent" />
+        <div className="my-1 flex animate-trace-in gap-3 border-l-2 border-zinc-700 bg-zinc-900/50 px-3 py-2">
+          <User size={13} className="mt-1 shrink-0 text-zinc-500" />
           <p className="text-sm leading-6 text-zinc-100">{item.text}</p>
         </div>
       )
@@ -68,7 +104,7 @@ function Line({ item }: { item: TraceItem }) {
     case 'message':
       return (
         <p
-          className={`animate-trace-in whitespace-pre-wrap py-2 text-sm leading-6 ${
+          className={`animate-trace-in whitespace-pre-wrap py-1.5 text-sm leading-6 ${
             item.kind === 'message' ? 'text-zinc-100' : 'text-zinc-400'
           }`}
         >
@@ -78,7 +114,7 @@ function Line({ item }: { item: TraceItem }) {
 
     case 'state':
       return (
-        <div className="animate-trace-in flex items-center gap-3 py-2">
+        <div className="flex animate-trace-in items-center gap-3 py-2">
           <span className="h-px flex-1 bg-zinc-800" />
           <span className="mono text-xs uppercase tracking-widest text-zinc-600">
             {item.state}
@@ -92,8 +128,8 @@ function Line({ item }: { item: TraceItem }) {
 
     case 'error':
       return (
-        <div className="animate-trace-in flex gap-3 rounded-card border border-fail/40 bg-fail/10 px-3 py-3">
-          <AlertTriangle size={14} className="mt-1 shrink-0 text-fail" />
+        <div className="my-1 flex animate-trace-in gap-3 border-l-2 border-fail bg-fail/10 px-3 py-2">
+          <AlertTriangle size={13} className="mt-1 shrink-0 text-fail" />
           <div className="min-w-0">
             <p className="mono text-xs font-medium uppercase tracking-wider text-fail">
               {item.code}
@@ -105,7 +141,7 @@ function Line({ item }: { item: TraceItem }) {
 
     case 'done':
       return (
-        <div className="mono animate-trace-in flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-800 pt-3 text-xs text-zinc-600">
+        <div className="mono mt-2 flex animate-trace-in flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-800 pt-2 text-xs text-zinc-600">
           <span>turn ended · {item.state}</span>
           <span>{item.toolCalls} tool calls</span>
           <span>{item.submits} submit attempts</span>
@@ -124,7 +160,7 @@ function ToolLine({ item }: { item: Extract<TraceItem, { kind: 'tool' }> }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group flex w-full items-baseline gap-2 rounded-input px-1 py-1 text-left transition-colors duration-150 ease-out hover:bg-zinc-800/60"
+        className="group flex w-full items-baseline gap-2 rounded-input px-1 py-1 text-left transition-colors duration-150 ease-out hover:bg-zinc-900"
       >
         <ChevronRight
           size={12}
@@ -132,7 +168,7 @@ function ToolLine({ item }: { item: Extract<TraceItem, { kind: 'tool' }> }) {
             open ? 'rotate-90' : ''
           }`}
         />
-        <span className="mono shrink-0 text-sm text-zinc-500">&gt;</span>
+        <span className="mono shrink-0 text-sm text-zinc-600">&gt;</span>
         <span className="mono shrink-0 text-sm text-zinc-100">{item.name}</span>
         <span
           className={`mono min-w-0 flex-1 truncate text-sm ${

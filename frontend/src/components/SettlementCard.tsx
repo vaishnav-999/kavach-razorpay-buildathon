@@ -9,6 +9,9 @@
 //     (invariant 4).
 //  2. No amount here is computed. `amount_paise` came from the order row, which
 //     came from the quote the merchant signed.
+//
+// When this panel is not the dominant one on the stage it collapses to a single
+// row that keeps the amount, the status and the Pay button reachable.
 
 import { CreditCard, Landmark, RefreshCw } from 'lucide-react'
 import type { MerchantOrder } from '../types'
@@ -39,13 +42,13 @@ export default function SettlementCard({
     <Panel
       title="Settlement"
       icon={<Landmark size={14} />}
-      className="shrink-0 animate-panel-in"
+      className="animate-panel-in"
       accent={paid ? 'pass' : 'none'}
       right={
         <>
           <button
             type="button"
-            className="btn h-6 px-2 text-xs"
+            className="btn-ghost"
             onClick={onRefresh}
             title="Re-read the merchant's order"
           >
@@ -53,7 +56,9 @@ export default function SettlementCard({
             poll
           </button>
           {order ? (
-            <Badge tone={paid ? 'pass' : order.status === 'FAILED' ? 'fail' : 'neutral'}>
+            <Badge
+              tone={paid ? 'pass' : order.status === 'FAILED' ? 'fail' : 'neutral'}
+            >
               {order.status}
             </Badge>
           ) : null}
@@ -64,14 +69,23 @@ export default function SettlementCard({
 
       {order ? (
         <>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-zinc-800 px-4 py-3">
+            <span className="mono text-xl font-semibold tracking-tight text-zinc-100">
+              {rupees(order.amount_paise)}
+            </span>
+            <span className="mono text-sm text-zinc-400">{order.currency}</span>
+            <span
+              className={`mono text-sm uppercase tracking-wider ${
+                paid ? 'text-pass' : order.status === 'FAILED' ? 'text-fail' : 'text-zinc-400'
+              }`}
+            >
+              {order.status}
+            </span>
+          </div>
+
           <dl className="px-4 py-3">
             <Row label="order">
               <Id value={order.id} />
-            </Row>
-            <Row label="amount">
-              <span className="text-base text-zinc-100">
-                {rupees(order.amount_paise)}
-              </span>
             </Row>
             <Row label="razorpay order">
               <Id value={order.razorpay_order_id ?? '—'} />
@@ -109,7 +123,7 @@ export default function SettlementCard({
             </p>
           ) : null}
 
-          <div className="flex items-center gap-3 border-t border-zinc-800 px-4 py-3">
+          <div className="flex items-center gap-4 border-t border-zinc-800 bg-zinc-900/40 px-4 py-3">
             {!settled ? (
               <button
                 type="button"
@@ -121,7 +135,7 @@ export default function SettlementCard({
                 {paying ? 'Verifying…' : 'Pay with Razorpay'}
               </button>
             ) : null}
-            <p className="text-xs leading-5 text-zinc-500">
+            <p className="max-w-[70ch] text-xs leading-5 text-zinc-500">
               {paid
                 ? 'Status read from the merchant after the server re-derived the HMAC over the order id in our own database.'
                 : 'Status is polled from the merchant. Nothing the checkout handler returns is written until the server has verified it.'}

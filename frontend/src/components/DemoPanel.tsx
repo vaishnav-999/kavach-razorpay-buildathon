@@ -1,4 +1,10 @@
-// §15 — the demo control panel, in the header bar.
+// §15 — the demo controls, as a utility bar at the foot of the screen.
+//
+// This is deliberately the quietest element in the console. It is a tool the
+// presenter reaches for, not a feature the audience is meant to read: ghost
+// buttons on chrome, 36px tall, below the fold of attention. It used to sit in
+// the header, where it competed with the session identity and wrapped the bar
+// onto a second line.
 //
 // Each button POSTs to one `/api/demo/*` endpoint and reports exactly what came
 // back: the summary line, the rule the change will now make fire, and every
@@ -99,42 +105,15 @@ export default function DemoPanel({
   }
 
   return (
-    <div className="relative flex items-center gap-2">
-      {ACTIONS.map(({ action, label, icon: Icon, title }) => (
-        <button
-          key={action}
-          type="button"
-          title={title}
-          className="btn h-7 px-2 text-xs"
-          disabled={busy !== null}
-          onClick={() => void run(action)}
-        >
-          {busy === action ? (
-            <Loader2 size={12} className="animate-spin" />
-          ) : (
-            <Icon size={12} />
-          )}
-          {label}
-        </button>
-      ))}
-
-      <button
-        type="button"
-        title="PK-005 served verbatim, the forced poisoned cart, and the tool schema it had nowhere to land in."
-        className="btn h-7 border-accent/40 bg-accent/10 px-2 text-xs text-accent hover:border-accent hover:bg-accent/20 hover:text-accent"
-        onClick={onOpenInjection}
-      >
-        <Syringe size={12} />
-        Injection
-      </button>
-
+    <div className="relative shrink-0 border-t border-zinc-800 bg-zinc-900">
+      {/* The result reads upward out of the bar it came from. */}
       {result || error ? (
-        <div className="panel animate-panel-in absolute right-0 top-9 z-30 w-[560px] shadow-xl">
+        <div className="absolute bottom-full left-0 z-30 mb-px w-[min(620px,100vw)] animate-panel-in border border-b-0 border-zinc-800 bg-zinc-950">
           <header className="panel-head">
             <h2 className="panel-title">{result?.action ?? error?.action}</h2>
             <button
               type="button"
-              className="ml-auto text-zinc-500 hover:text-zinc-100"
+              className="ml-auto text-zinc-500 transition-colors duration-150 ease-out hover:text-zinc-100"
               onClick={() => {
                 setResult(null)
                 setError(null)
@@ -144,12 +123,14 @@ export default function DemoPanel({
             </button>
           </header>
 
-          <div className="panel-body max-h-72 p-4">
+          <div className="max-h-[50vh] overflow-y-auto px-4 py-3">
             {error ? (
               <p className="mono text-sm text-fail">{error.text}</p>
             ) : result ? (
               <>
-                <p className="text-sm text-zinc-100">{result.summary}</p>
+                <p className="max-w-[70ch] text-sm leading-6 text-zinc-100">
+                  {result.summary}
+                </p>
 
                 {result.changed.length ? (
                   <ul className="mt-3 flex flex-col gap-1">
@@ -176,7 +157,7 @@ export default function DemoPanel({
                 ) : null}
 
                 {result.triggers ? (
-                  <p className="mt-3 text-xs leading-5 text-zinc-500">
+                  <p className="mt-3 max-w-[70ch] text-xs leading-5 text-zinc-500">
                     {result.triggers}
                   </p>
                 ) : null}
@@ -185,6 +166,44 @@ export default function DemoPanel({
           </div>
         </div>
       ) : null}
+
+      <div className="flex h-9 items-center gap-1 overflow-x-auto px-3">
+        <span className="label mr-2">demo</span>
+
+        {ACTIONS.map(({ action, label, icon: Icon, title }) => (
+          <button
+            key={action}
+            type="button"
+            title={title}
+            className="btn-ghost"
+            disabled={busy !== null}
+            onClick={() => void run(action)}
+          >
+            {busy === action ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Icon size={12} />
+            )}
+            {label}
+          </button>
+        ))}
+
+        <span aria-hidden className="mx-2 h-4 w-px shrink-0 bg-zinc-800" />
+
+        <button
+          type="button"
+          title="PK-005 served verbatim, the forced poisoned cart, and the tool schema it had nowhere to land in."
+          className="btn-ghost"
+          onClick={onOpenInjection}
+        >
+          <Syringe size={12} />
+          Injection
+        </button>
+
+        <span className="mono ml-auto hidden shrink-0 pl-4 text-xs text-zinc-600 lg:inline">
+          §15 — every action writes DEMO_ACTION_TRIGGERED to this chain
+        </span>
+      </div>
     </div>
   )
 }

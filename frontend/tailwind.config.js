@@ -3,11 +3,14 @@
 // The design system, in one file, so nothing anywhere else invents a value.
 //
 //  * Neutrals are Tailwind `zinc`, untouched. No hand-picked greys.
-//  * ONE accent (`accent`, blue-500) for primary actions and data highlights.
+//  * ONE accent (`accent`) and it appears only on primary actions and the focus
+//    ring. Not on brand marks, not on ids, not on status.
 //  * Green and red exist only for guard rule pass/fail and payment settlement.
+//    They are functional, never decorative.
 //  * Type scale is exactly 12/14/16/20/24/32 — the defaults are replaced, not
 //    extended, so an off-scale size is a build-visible mistake.
-//  * Two radii: `card` for panels, `input` for controls and badges.
+//  * Two radii, both small: `input` for controls and badges, `card` for the one
+//    remaining floated surface (the demo result popover). Panels have none.
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
@@ -17,12 +20,13 @@ export default {
       base: ['16px', '24px'],
       lg: ['20px', '28px'],
       xl: ['24px', '32px'],
-      '2xl': ['32px', '40px'],
+      '2xl': ['32px', '36px'],
     },
     borderRadius: {
       none: '0',
       input: '4px',
-      card: '8px',
+      card: '6px',
+      full: '9999px',
     },
     extend: {
       colors: {
@@ -45,10 +49,10 @@ export default {
       },
       keyframes: {
         // Motion carries information or it does not exist. These three are the
-        // whole vocabulary: rules evaluating, trace lines arriving, a panel
-        // taking its decided state.
+        // whole vocabulary: rules landing one after another as a decision
+        // renders, trace lines arriving, a region taking a decided state.
         'rule-in': {
-          from: { opacity: '0', transform: 'translateY(4px)' },
+          from: { opacity: '0', transform: 'translateY(3px)' },
           to: { opacity: '1', transform: 'none' },
         },
         'trace-in': {
@@ -56,14 +60,17 @@ export default {
           to: { opacity: '1' },
         },
         'panel-in': {
-          from: { opacity: '0', transform: 'translateY(8px)' },
+          from: { opacity: '0', transform: 'translateY(4px)' },
           to: { opacity: '1', transform: 'none' },
         },
       },
       animation: {
-        'rule-in': 'rule-in 160ms ease-out both',
+        'rule-in': 'rule-in 150ms ease-out both',
         'trace-in': 'trace-in 150ms ease-out both',
-        'panel-in': 'panel-in 180ms ease-out both',
+        'panel-in': 'panel-in 150ms ease-out both',
+      },
+      transitionTimingFunction: {
+        DEFAULT: 'cubic-bezier(0, 0, 0.2, 1)',
       },
     },
   },
