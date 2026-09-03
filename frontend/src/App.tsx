@@ -15,6 +15,7 @@ import ChatPanel from './components/ChatPanel'
 import AuthorizationCard from './components/AuthorizationCard'
 import GuardConsole from './components/GuardConsole'
 import AuditTrace from './components/AuditTrace'
+import InjectionPanel from './components/InjectionPanel'
 import SettlementCard from './components/SettlementCard'
 import { api, KavachApiError } from './lib/api'
 import { openCheckout } from './lib/razorpay'
@@ -39,6 +40,9 @@ export default function App() {
 
   const [chain, setChain] = useState<AuditChain | null>(null)
   const [chainLoading, setChainLoading] = useState(false)
+
+  // §16.5 — the injection screen, opened from the demo panel.
+  const [injectionOpen, setInjectionOpen] = useState(false)
 
   const [justification, setJustification] = useState<string | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
@@ -274,7 +278,20 @@ export default function App() {
           void refreshChain()
           void refreshOrder()
         }}
+        onOpenInjection={() => setInjectionOpen(true)}
       />
+
+      {injectionOpen ? (
+        <InjectionPanel
+          session={session}
+          chain={chain}
+          onClose={() => setInjectionOpen(false)}
+          onAction={() => {
+            void refreshChain()
+            void refreshOrder()
+          }}
+        />
+      ) : null}
 
       {startError ? (
         <div className="m-2 flex items-start gap-3 rounded-card border border-fail/40 bg-fail/10 p-4">

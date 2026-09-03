@@ -3,7 +3,7 @@
 Paste this whole file into a new Claude chat if the conversation is lost.
 Keep it in the repo root and update "Where I am" after every milestone.
 
-Last updated: 3 September 2026, after M7.
+Last updated: 3 September 2026, after M8.
 
 ---
 
@@ -28,7 +28,7 @@ Last updated: 3 September 2026, after M7.
 > I'm on Windows / PowerShell 5.1, corporate laptop. Docker Desktop works. Postgres runs
 > on host port **5433**. Deployed on Render at **https://kavach-4576.onrender.com**.
 >
-> I've completed M0–M7. See "Where I am" below. Read the attached BUILD_SPEC.md and pick
+> I've completed M0–M8. See "Where I am" below. Read the attached BUILD_SPEC.md and pick
 > up from there.
 
 Attach: `BUILD_SPEC.md`, `MILESTONE_PROMPTS.md`, `CLAUDE.md`, and this file.
@@ -37,8 +37,8 @@ Attach: `BUILD_SPEC.md`, `MILESTONE_PROMPTS.md`, `CLAUDE.md`, and this file.
 
 ## WHERE I AM
 
-**Done: M0–M7, plus unplanned M5a/M5b security hardening.**
-**Next: M8 — Demo panel + injection (2h).**
+**Done: M0–M8, plus unplanned M5a/M5b security hardening.**
+**Next: M9 — Tests + docs (2h).**
 
 | Milestone | State | Evidence |
 |---|---|---|
@@ -51,10 +51,11 @@ Attach: `BUILD_SPEC.md`, `MILESTONE_PROMPTS.md`, `CLAUDE.md`, and this file.
 | M5a/M5b hardening | done | Four binding gaps found and closed, each with a proof script |
 | M6 Agent | done | Live Gemini run to `AWAITING_AUTHORIZATION`, 9 tool calls, 0 submit attempts |
 | M7 Frontend | done | Console live locally and on Render; block triggered from the UI |
+| M8 Demo panel + injection | done | Five §15 levers verified over HTTP; forced poisoned cart → MG-005 BLOCK, 9/9 rules, Razorpay client call counter unmoved |
 
 ### Progress
 
-~21 of 30 hours spent. Remaining: M8 (2h), M9 (2h), recording (3h protected).
+~23 of 30 hours spent. Remaining: M9 (2h), recording (3h protected).
 By risk the project is ~85% done — everything that could force a redesign is behind me.
 
 ---
@@ -70,7 +71,38 @@ By risk the project is ~85% done — everything that could force a redesign is b
    `LLM_PROVIDER=cassette` and no Gemini key. The UI loads and the merchant/guard paths
    work, but the agent does not. Add `GEMINI_API_KEY`, `LLM_PROVIDER=gemini` and
    `GEMINI_MODEL` in the Render dashboard before demoing from the live URL.
-3. **Reset seed stock before recording.** Many verification runs have drained it.
+3. **Reset seed stock before recording.** `POST /api/demo/reset` now does this, and
+   keeps `audit_events`.
+4. **Rebuild the container after M8.** The demo router and the rebuilt frontend bundle
+   are new: `docker compose up -d --build`.
+
+### M8 — what the demo panel gives you
+
+`app/platform/demo.py` is the assembler; the actions live one concern to a file
+beside it (`demo_merchant`, `demo_authority`, `demo_webhook`, `demo_reset`,
+`demo_injection`, `demo_evidence`, over a shared `demo_base` and
+`demo_scenario`). §3 shows a single `demo.py`; it would have been 600 lines, and
+CLAUDE.md's ~300-line rule won. All of it mounts under `/api/demo`, every route
+gated by `DEMO_MODE`. With the
+flag off they answer **403 `DEMO_MODE_DISABLED`** rather than 404, so a judge sees a
+switch that is off, not a broken deployment.
+
+| Endpoint | Effect |
+|---|---|
+| `POST /api/demo/drift-price` | PK-003 45000 → 49500. CV-003 on the next submit |
+| `POST /api/demo/deplete-stock` | PK-003 stock → 3 against a cart of 4. CV-002 |
+| `POST /api/demo/revoke-mandate` | Revokes the newest ACTIVE mandate. MG-002 |
+| `POST /api/demo/replay-webhook` | Re-POSTs the stored raw body + signature over real HTTP. One state transition |
+| `POST /api/demo/reset` | Seed prices and stock back, transaction tables cleared, `audit_events` kept |
+| `POST /api/demo/force-poisoned-cart` | PK-001×8 + PK-003×4 + PK-005×12 = 756000 through the real submit path → MG-005 BLOCK |
+| `GET /api/demo/injection` | PK-005's description verbatim + digest, the `submit_purchase` schema, the absent parameters |
+
+Every response says what it changed, and the console renders it. The **Injection**
+button in the header opens the side-by-side screen: the description as served on the
+left, the nine-rule BLOCK on the right, the tool schema underneath.
+
+The model still does **not** fall for the injection, and nothing was weakened to make
+it. The forced control is how the block is demonstrated deterministically.
 
 ---
 

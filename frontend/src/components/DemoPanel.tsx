@@ -1,9 +1,14 @@
 // §15 — the demo control panel, in the header bar.
 //
 // Each button POSTs to one `/api/demo/*` endpoint and reports exactly what came
-// back. The endpoints arrive with M8 and are mounted only when `DEMO_MODE=true`;
-// until then a button reports the 404 it received rather than implying an
-// action happened. Nothing here simulates an effect client-side.
+// back: the summary line, the rule the change will now make fire, and every
+// field that moved as `before → after`. Nothing here simulates an effect
+// client-side, and nothing is described as having happened unless the server
+// said it did.
+//
+// The endpoints are gated by `DEMO_MODE`. With the flag off they answer
+// `DEMO_MODE_DISABLED`, and that is what the panel shows — a switch that is
+// deliberately off, not a broken deployment.
 
 import { useState } from 'react'
 import {
@@ -11,10 +16,13 @@ import {
   PackageMinus,
   RotateCcw,
   Repeat,
+  Syringe,
   TrendingUp,
   Loader2,
+  X,
 } from 'lucide-react'
 import { api, KavachApiError } from '../lib/api'
+import type { DemoActionResult, SessionCreated } from '../types'
 
 const ACTIONS = [
   {
@@ -50,39 +58,48 @@ const ACTIONS = [
   },
 ] as const
 
-export default function DemoPanel({ onAction }: { onAction: () => void }) {
+export default function DemoPanel({
+  session,
+  onAction,
+  onOpenInjection,
+}: {
+  session: SessionCreated | null
+  onAction: () => void
+  onOpenInjection: () => void
+}) {
   const [busy, setBusy] = useState<string | null>(null)
-  const [note, setNote] = useState<{ text: string; failed: boolean } | null>(null)
+  const [result, setResult] = useState<DemoActionResult | null>(null)
+  const [error, setError] = useState<{ action: string; text: string } | null>(null)
 
   async function run(action: string) {
     setBusy(action)
-    setNote(null)
+    setResult(null)
+    setError(null)
     try {
-      await api.demo(action)
-      setNote({ text: `${action} ok`, failed: false })
+      // The action lands on this session's chain, so DEMO_ACTION_TRIGGERED
+      // appears in the audit trace next to what it caused.
+      setResult(
+        await api.demo(action, {
+          correlation_id: session?.correlation_id ?? null,
+          session_id: session?.session_id ?? null,
+        }),
+      )
       onAction()
     } catch (err) {
-      const message =
-        err instanceof KavachApiError
-          ? err.status === 404
-            ? `${action}: not mounted (M8, DEMO_MODE)`
-            : `${action}: ${err.code}`
-          : `${action}: request failed`
-      setNote({ text: message, failed: true })
+      setError({
+        action,
+        text:
+          err instanceof KavachApiError
+            ? `${err.code} — ${err.message}`
+            : 'The request did not reach the server.',
+      })
     } finally {
       setBusy(null)
     }
   }
 
   return (
-    <div className="flex items-center gap-2">
-      {note ? (
-        <span
-          className={`mono text-xs ${note.failed ? 'text-fail' : 'text-zinc-500'}`}
-        >
-          {note.text}
-        </span>
-      ) : null}
+    <div className="relative flex items-center gap-2">
       {ACTIONS.map(({ action, label, icon: Icon, title }) => (
         <button
           key={action}
@@ -100,6 +117,74 @@ export default function DemoPanel({ onAction }: { onAction: () => void }) {
           {label}
         </button>
       ))}
+
+      <button
+        type="button"
+        title="PK-005 served verbatim, the forced poisoned cart, and the tool schema it had nowhere to land in."
+        className="btn h-7 border-accent/40 bg-accent/10 px-2 text-xs text-accent hover:border-accent hover:bg-accent/20 hover:text-accent"
+        onClick={onOpenInjection}
+      >
+        <Syringe size={12} />
+        Injection
+      </button>
+
+      {result || error ? (
+        <div className="panel animate-panel-in absolute right-0 top-9 z-30 w-[560px] shadow-xl">
+          <header className="panel-head">
+            <h2 className="panel-title">{result?.action ?? error?.action}</h2>
+            <button
+              type="button"
+              className="ml-auto text-zinc-500 hover:text-zinc-100"
+              onClick={() => {
+                setResult(null)
+                setError(null)
+              }}
+            >
+              <X size={14} />
+            </button>
+          </header>
+
+          <div className="panel-body max-h-72 p-4">
+            {error ? (
+              <p className="mono text-sm text-fail">{error.text}</p>
+            ) : result ? (
+              <>
+                <p className="text-sm text-zinc-100">{result.summary}</p>
+
+                {result.changed.length ? (
+                  <ul className="mt-3 flex flex-col gap-1">
+                    {result.changed.map((change, i) => (
+                      <li
+                        key={`${change.target}.${change.field}.${i}`}
+                        className="well mono flex items-baseline gap-2 px-2 py-1 text-xs"
+                      >
+                        <span className="text-zinc-500">{change.target}</span>
+                        <span className="text-zinc-400">{change.field}</span>
+                        <span className="ml-auto text-zinc-500">
+                          {String(change.before ?? '—')}
+                        </span>
+                        <span className="text-zinc-600">→</span>
+                        <span className="text-zinc-100">
+                          {String(change.after ?? '—')}
+                        </span>
+                        {change.unit ? (
+                          <span className="text-zinc-600">{change.unit}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {result.triggers ? (
+                  <p className="mt-3 text-xs leading-5 text-zinc-500">
+                    {result.triggers}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

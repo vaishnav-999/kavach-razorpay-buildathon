@@ -56,6 +56,14 @@ ERROR_STATUS: dict[str, int] = {
     "LLM_UNAVAILABLE": 503,
     "AGENT_LIMIT_REACHED": 409,
     "ILLEGAL_STATE_TRANSITION": 500,
+    # demo control panel (§15). Not in the §18.2 table, which predates the
+    # panel; these are the two answers a demo endpoint can give that are not
+    # already covered above, and they use the same envelope as everything else.
+    # DEMO_MODE_DISABLED is what every /api/demo/* endpoint returns when
+    # DEMO_MODE is off, in place of a 404 that a caller could read as "the
+    # deployment is broken" rather than "this is switched off on purpose".
+    "DEMO_MODE_DISABLED": 403,
+    "DEMO_PRECONDITION_FAILED": 409,
 }
 
 # The nine guard block codes, in rule order (§9.2).

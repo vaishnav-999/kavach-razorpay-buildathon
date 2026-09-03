@@ -6,7 +6,10 @@
 import type {
   AuditChain,
   ApiError,
+  DemoActionResult,
+  InjectionEvidence,
   MerchantOrder,
+  PoisonedCartResult,
   SessionCreated,
   UiConfig,
 } from '../types'
@@ -83,8 +86,31 @@ export const api = {
       { method: 'POST', body: JSON.stringify(body) },
     ),
 
-  /** §15 — the demo control panel. Arrives with M8; the buttons report a 404
-   *  as a 404 rather than pretending an action happened. */
-  demo: (action: string) =>
-    request<Record<string, unknown>>(`/api/demo/${action}`, { method: 'POST' }),
+  /** §15 — the demo control panel.
+   *
+   *  `correlation_id` is passed so the DEMO_ACTION_TRIGGERED event lands on the
+   *  chain this console is already watching, and the audit trace shows the
+   *  lever beside the rule it made fire. Every response says what it changed;
+   *  nothing is assumed to have happened because a button was pressed. */
+  demo: (action: string, body: DemoBody = {}) =>
+    request<DemoActionResult>(`/api/demo/${action}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** §16.5 — the description as stored, and the tool schema it had to land in. */
+  injection: () => request<InjectionEvidence>('/api/demo/injection'),
+
+  /** §16.5 — the poisoned cart, through the same submit path as a real one. */
+  forcePoisonedCart: (body: DemoBody = {}) =>
+    request<PoisonedCartResult>('/api/demo/force-poisoned-cart', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+}
+
+export interface DemoBody {
+  correlation_id?: string | null
+  session_id?: string | null
+  mandate_id?: string | null
 }

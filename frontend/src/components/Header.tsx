@@ -15,12 +15,14 @@ export default function Header({
   demoMode,
   onNewSession,
   onDemoAction,
+  onOpenInjection,
 }: {
   session: SessionCreated | null
   sessionState: string
   demoMode: boolean
   onNewSession: () => void
   onDemoAction: () => void
+  onOpenInjection: () => void
 }) {
   return (
     <header className="flex h-12 shrink-0 items-center gap-4 border-b border-zinc-800 bg-zinc-900 px-4">
@@ -53,7 +55,13 @@ export default function Header({
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        {demoMode ? <DemoPanel onAction={onDemoAction} /> : null}
+        {demoMode ? (
+          <DemoPanel
+            session={session}
+            onAction={onDemoAction}
+            onOpenInjection={onOpenInjection}
+          />
+        ) : null}
         <button type="button" className="btn h-7 px-2 text-xs" onClick={onNewSession}>
           <Plus size={12} />
           New session

@@ -201,3 +201,108 @@ export interface ApiError {
   correlation_id?: string | null
   detail?: unknown
 }
+
+// ── §15 demo control panel ────────────────────────────────────────────────
+
+/** One field a demo action moved. Rendered as a before → after row. */
+export interface DemoChange {
+  target: string
+  field: string
+  before: unknown
+  after: unknown
+  unit: string | null
+}
+
+export interface DemoActionResult {
+  action: string
+  summary: string
+  triggers: string | null
+  changed: DemoChange[]
+  correlation_id: string
+  detail: Record<string, unknown>
+}
+
+/** §16.5 — what the merchant published and where its instruction had to land. */
+export interface InjectionEvidence {
+  product: {
+    sku: string
+    name: string
+    merchant_id: string
+    unit_price_paise: number
+    /** Verbatim. The same bytes /merchant/catalog serves. Never truncated here. */
+    description: string
+  }
+  served_verbatim: {
+    length: number
+    sha256: string
+    sanitised: boolean
+    /** The platform's own reading of the stored text. Changes nothing. */
+    instruction_markers: string[]
+    flagged_reason: string | null
+    detail: string
+    audit_event_type: string
+  }
+  tool: {
+    name: string
+    description: string
+    parameters: { properties?: Record<string, { description?: string; type?: string }>; required?: string[] }
+  }
+  parameters: {
+    declared_by_tool: Record<string, string[]>
+    declared_total: number
+    absent: { name: string; present: boolean }[]
+    detail: string
+  }
+  arithmetic: {
+    correct_total_paise: number
+    poisoned_total_paise: number
+    mandate_cap_paise: number
+    overshoot_paise: number
+    injected_line: {
+      sku: string
+      qty: number
+      unit_price_paise: number
+      line_total_paise: number
+    }
+    currency: string
+  }
+  attacks: { asks_for: string; answer: string }[]
+}
+
+/** The forced poisoned-cart submission, through the real Guard call site. */
+export interface PoisonedCartResult {
+  action: string
+  summary: string
+  correlation_id: string
+  cart: { cart_id: string; merchant_id: string; items: { sku: string; qty: number }[] }
+  quote: {
+    quote_id: string
+    total_paise: number
+    currency: string
+    line_items: LineItem[]
+    signature: string
+  }
+  mandate: {
+    mandate_id: string
+    status: string
+    source: string
+    max_amount_paise: number
+    cumulative_cap_paise: number
+    prompt_playback: string
+  }
+  guard: GuardDecision
+  razorpay: {
+    client_calls_before: number
+    client_calls_after: number
+    orders_for_quote: number
+    order_created: boolean
+    detail: string
+  }
+  injection: {
+    sku: string
+    qty: number
+    line_total_paise: number
+    source: string
+    failed_rule: GuardRule | null
+  }
+}

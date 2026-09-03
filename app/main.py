@@ -27,6 +27,7 @@ from app.merchant.router import router as merchant_router
 from app.merchant.seed import seed_database
 from app.platform import dev as dev_scaffold
 from app.platform.audit_router import router as audit_router
+from app.platform.demo import router as demo_router
 from app.platform.mandate import router as mandate_router
 from app.platform.payments import router as payments_router
 from app.platform.ui_router import router as ui_router
@@ -105,6 +106,11 @@ def create_app() -> FastAPI:
     # and the Guard console both read from: the SSE stream narrates a run, this
     # endpoint is the record of it.
     app.include_router(audit_router)
+
+    # §15 — the demo control panel. Every route is gated by `require_demo_mode`
+    # and refuses with DEMO_MODE_DISABLED when the flag is off, so a judge on a
+    # live-safe deployment gets an explanation rather than a 404.
+    app.include_router(demo_router)
 
     # §14 — the two reads the browser needs: the Razorpay key id at runtime,
     # and the §7.9 order view without handing a bundle the merchant API key.

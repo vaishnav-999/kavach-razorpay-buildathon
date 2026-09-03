@@ -26,6 +26,19 @@ TIMEOUT_SECONDS = 15.0
 
 log = logging.getLogger("kavach.razorpay")
 
+# Every outbound Razorpay request increments this, and nothing decrements it.
+#
+# It exists for one claim: the §15 injection control reports the counter before
+# and immediately after a BLOCKED submission, so "no Razorpay activity" is a
+# reading taken from the client itself rather than an assertion in prose. It is
+# a process-local integer, never persisted and never read by any decision.
+_call_count = 0
+
+
+def call_count() -> int:
+    """How many HTTP requests this process has made to Razorpay."""
+    return _call_count
+
 
 class RazorpayError(Exception):
     """A non-2xx from Razorpay, or a transport failure reaching it.
@@ -52,6 +65,8 @@ def _auth() -> tuple[str, str]:
 
 
 def _request(method: str, path: str, *, json: dict | None = None) -> dict:
+    global _call_count
+    _call_count += 1
     url = f"{BASE_URL}{path}"
     try:
         with httpx.Client(timeout=TIMEOUT_SECONDS) as client:
